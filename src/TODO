@@ -1,0 +1,22 @@
+# TODO LIST
+
+## Feature
+- [ ] Add Initiative Tracker with turn order and round tracking. Should use Scoreboard component for easy display.
+  - [ ] Add commands for adding/removing entities to/from the initiative tracker.
+  - [ ] Add command for starting/stopping the initiative tracker.
+  - [ ] Add command for advancing to the next turn.
+  - [ ] Automatically sort entities by initiative score when added.
+  - [ ]
+- [ ] Add quick command for entity rename using UUID or possessed entity.
+- [ ] Add command for setting entity D&D stats using UUID or possessed entity.
+- [ ] Add quick command for adding / removing stat sheets to entities.
+- [ ] Add quick command for cloning stat sheets to an entity.
+- [ ] Allow any entity possession.
+- [ ] Give some kind of on-screen feedback when an entity is possessed.
+- [ ] Make possessed entity immortal.
+- [ ] Scale the player when possessing different sized entities. (May require manual case list.)
+- [ ] Add commands for flight speed.
+- [ ] Add commands for flight mode.
+
+## Bugfix
+

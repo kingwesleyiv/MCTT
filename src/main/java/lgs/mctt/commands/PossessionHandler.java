@@ -9,6 +9,8 @@ import org.bukkit.World;
 import org.bukkit.entity.*;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.scoreboard.Team;
 
@@ -46,7 +48,7 @@ public class PossessionHandler {
 	/** Start or stop possession */
 	public void handlePossess(Player player, Entity target) {
 		if (isPossessing(player)) { stopPossessing(player); return; }
-		if (target == null || !target.isValid()) { player.sendMessage("§7No valid target."); return; }
+		if (target == null || !target.isValid()) { player.sendMessage("§7Invalid target."); return; }
 		if (target instanceof Player && !MCTT.isDM(player)) { player.sendMessage("§cOnly a DM can possess other players."); return; }
 		
 		UUID targetId = target.getUniqueId();
@@ -58,13 +60,14 @@ public class PossessionHandler {
 		//Entity cloneEntity = cloneEntity(target);
 		//if (cloneEntity == null) { player.sendMessage("§cFailed to clone entity."); return; }
 		
-		// Hide real target and show clone only to possessor
-		MCTT.HideEntityExcept(player);
+		// Hide real target from possessor.
 		MCTT.HideEntityFrom(target, player);
+		player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 1, false, false, false));
 		
 		// Toggle player physics/collision
 		player.setCollidable(false);
 		target.setNoPhysics(true);
+		target.setInvulnerable(true);
 		target.setGravity(false);
 		
 		player.teleport(target.getLocation());

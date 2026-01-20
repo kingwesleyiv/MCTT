@@ -164,7 +164,7 @@ public class StateMachine extends BukkitRunnable {
 		// --- UNCONSCIOUS ---
 		if (tags.contains("UNCONSCIOUS")) {
 			if (!player.hasPotionEffect(PotionEffectType.BLINDNESS)) {
-				player.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, Integer.MAX_VALUE, 0, false, false, false));
+				player.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, Integer.MAX_VALUE, 1, false, false, false));
 			}
 			
 			if (speedAttr != null && speedAttr.getModifier(SPEED_ZERO_KEY) == null) {

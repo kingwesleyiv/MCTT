@@ -10,14 +10,11 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 public final class Raycaster {
 	
-	private static final Map<UUID, ArmorStand> playerMarkers = new HashMap<>();
+	private static final Map<UUID, BlockDisplay> playerMarkers = new HashMap<>();
 	
 	public static RayTraceResult spawnParticleBeam(Player player, double maxDistance) {
 		float spacing = 0.5f;
@@ -37,16 +34,20 @@ public final class Raycaster {
 			end = eye.clone().add(dir.clone().multiply(maxDistance));
 		}
 		
-		// Make rainbow dust color.
-		int tRGB = java.awt.Color.HSBtoRGB((System.currentTimeMillis() % 2000) / 2000f, 1f, 1f); // 2 second (2000 ms) cycle hue
-		Color rainbow = Color.fromRGB((tRGB >>16)&0xFF, (tRGB >>8)&0xFF, tRGB &0xFF);
-		
+		Vector feetDir = end.toVector().subtract(feet.toVector()).normalize(); // Direction from feet to hit location.
+		double totalDistance = feet.distance(end);
 		boolean hit = (result != null);
 		
-		Vector feetDir = end.toVector().subtract(feet.toVector()).normalize(); // vector from feet -> end
-		//Vector base = feet.toVector(); // keep a stable copy of the feet vector
+		// Dust particle options
+		Particle.DustOptions dust;
+		Particle.DustOptions rainbowDust = new Particle.DustOptions(Color.fromRGB(0,0,0), 0.5f);
 		
-		double totalDistance = feet.distance(end);
+		if (!hit){
+			int tRGB = java.awt.Color.HSBtoRGB((System.currentTimeMillis() % 2000) / 2000f, 1f, 1f); // 2 second (2000 ms) cycle hue
+			Color rainbow = Color.fromRGB((tRGB >>16)&0xFF, (tRGB >>8)&0xFF, tRGB &0xFF);
+			rainbowDust = new Particle.DustOptions(rainbow, 0.5f);
+		}
+		
 		for (double d = 0.0; d <= totalDistance; d += Math.max(0.01, spacing)) {
 			Vector pointVec = feet.toVector().clone().add(feetDir.clone().multiply(d));
 			Location loc = new Location(world, pointVec.getX(), pointVec.getY()+0.1f, pointVec.getZ());
@@ -54,10 +55,27 @@ public final class Raycaster {
 			double pdFoot = partDist * 3.28084;
 			
 			if (hit) {
-				Particle.DustOptions dust = new Particle.DustOptions(Color.fromRGB(0,0,0), 0.5f);
+				// Color based on distance to player in feet.
+				switch (
+					(int) pdFoot <= 10 ? 1 :
+					(int) pdFoot <= 15 ? 2 :
+					(int) pdFoot <= 20 ? 3 :
+					(int) pdFoot <= 30 ? 4 :
+					(int) pdFoot <= 60 ? 5 :
+					(int) pdFoot <= 90 ? 6 :
+					(int) pdFoot <= 120 ? 7 :
+						8) {
+					case 1 -> dust = new Particle.DustOptions(Color.fromRGB(0,128,0), 1f);
+					case 2 -> dust = new Particle.DustOptions(Color.fromRGB(0,255,0), 1f);
+					case 3 -> dust = new Particle.DustOptions(Color.fromRGB(128,255,0), 1f);
+					case 4 -> dust = new Particle.DustOptions(Color.fromRGB(255,255,0), 1f);
+					case 5 -> dust = new Particle.DustOptions(Color.fromRGB(255,128,0), 1f);
+					case 6 -> dust = new Particle.DustOptions(Color.fromRGB(255,0,0), 1f);
+					case 7 -> dust = new Particle.DustOptions(Color.fromRGB(128,0,255), 1f);
+					default -> dust = new Particle.DustOptions(Color.fromRGB(128,128,128), 1f);
+				}
 				world.spawnParticle(Particle.DUST, loc, 1, 0, 0, 0, 0, dust);
 			} else {
-				Particle.DustOptions rainbowDust = new Particle.DustOptions(rainbow, 0.5f);
 				world.spawnParticle(Particle.DUST, loc, 1, 0, 0, 0, 0, rainbowDust);
 			}
 		}
@@ -65,7 +83,7 @@ public final class Raycaster {
 		if (hit) {// Spawn or teleport the marker entity.
 			manageMarkerEntity(player, end.subtract(0, 0.7,0));
 		} else {// Spawn crit particles at end point.
-			world.spawnParticle(Particle.CRIT, end, 20, 0.3, 0.3, 0.3, 0.01);
+			world.spawnParticle(Particle.CRIT, feet, 20, 0.3, 0.3, 0.3, 0.01);
 		}
 		
 		return result;
@@ -73,18 +91,13 @@ public final class Raycaster {
 	
 	private static void manageMarkerEntity(Player player, Location target) {
 		UUID id = player.getUniqueId();
-		ArmorStand marker = playerMarkers.get(id);
+		BlockDisplay marker = playerMarkers.get(id);
 		
 		if (marker == null) {
-			marker = target.getWorld().spawn(target, ArmorStand.class, markerEntity -> {
-				markerEntity.setCanTick(false);
-				markerEntity.setSmall(true);
-				markerEntity.setMarker(true);
-				markerEntity.setInvisible(true);
-				markerEntity.setGlowing(true);
-				try { markerEntity.getAttribute(Attribute.SCALE).setBaseValue(0.7);
-				} catch (Exception e) { player.sendMessage(e.getMessage());}
-				markerEntity.setItem (EquipmentSlot.HEAD, new ItemStack(Material.GLASS));
+			marker = target.getWorld().spawn(target, BlockDisplay.class, markerEntity -> {
+				markerEntity.setBlock(Material.GLASS.createBlockData());
+				markerEntity.setDisplayWidth(0.1f);
+				//markerEntity.setItem(EquipmentSlot.HEAD, new ItemStack(Material.GLASS));
 			});
 			
 			
@@ -93,10 +106,10 @@ public final class Raycaster {
 			// Make invisible to all players except the owner
 			MCTT.HideEntityExcept(marker, Collections.singletonList(player));
 			
-			final ArmorStand markerRef = marker;
+			final BlockDisplay markerRef = marker;
 			// Schedule removal after 10s if not refreshed
 			Bukkit.getScheduler().runTaskLater(MCTT.getPlugin(MCTT.class), () -> {
-				ArmorStand current = playerMarkers.get(id);
+				BlockDisplay current = playerMarkers.get(id);
 				if (current != null && current.equals(markerRef) && !current.isDead() && current.isValid()) {
 					current.remove();
 					playerMarkers.remove(id);

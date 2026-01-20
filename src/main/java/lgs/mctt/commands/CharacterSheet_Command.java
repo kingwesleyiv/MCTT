@@ -11,11 +11,9 @@ import java.util.UUID;
 
 public class CharacterSheet_Command {
 	
-	private final MCTT plugin;
 	private final CharacterSheet_Manager manager;
 	
-	public CharacterSheet_Command(MCTT plugin, CharacterSheet_Manager manager) {
-		this.plugin = plugin;
+	public CharacterSheet_Command(CharacterSheet_Manager manager) {
 		this.manager = manager;
 	}
 	

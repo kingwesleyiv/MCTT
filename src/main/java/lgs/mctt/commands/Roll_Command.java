@@ -4,22 +4,19 @@ import lgs.mctt.MCTT;
 import lgs.mctt.characters.CharacterSheet;
 import lgs.mctt.characters.CharacterSheet_Manager;
 import lgs.mctt.characters.Stat;
-import org.bukkit.ChatColor;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextColor;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
-import java.util.UUID;
+import java.util.*;
 
 public class Roll_Command {
 	
-	private final MCTT plugin;
 	private final Random rng = new Random();
 	private final CharacterSheet_Manager manager;
 	
-	public Roll_Command(MCTT plugin, CharacterSheet_Manager manager) {
-		this.plugin = plugin;
+	public Roll_Command(CharacterSheet_Manager manager) {
 		this.manager = manager;
 	}
 	
@@ -28,7 +25,7 @@ public class Roll_Command {
 	 */
 	public int rollDice(Player player, int count, int sides) {
 		if (count < 1 || sides < 1) {
-			player.sendMessage(ChatColor.RED + "Invalid dice. Usage: /r <count> <sides>");
+			player.sendMessage(NamedTextColor.RED + "Invalid dice. Usage: /r <count> <sides>");
 			return 0;
 		}
 		
@@ -39,95 +36,91 @@ public class Roll_Command {
 		
 		int total = rolls.stream().mapToInt(Integer::intValue).sum();
 		
-		sendRollMessage(player, "d" + sides, rolls, 0, 0);
+		sendRollMessage(player, "d" + sides, rolls, 0, 0, 0);
 		return 1;
 	}
 	
-	/**
-	 * Roll using /r <stat> for the player's assigned sheet
-	 * Auto-creates a sheet if missing
-	 */
-	public int rollStat(Player player, String statName) {
+// Use /r to roll random numbers. Can use /r <stat> to roll a character stat (only supports d20 stat rolls at the moment.)
+	public int rollStat(Player player, String statName, int bonus, int advantage) {
+		int baseModifier = 0;
+		int profBonus = bonus;
+		int advState = advantage;
+		
 		UUID playerId = player.getUniqueId();
-		
 		CharacterSheet sheet = manager.getAssignedSheet(playerId);
-		if (sheet == null) {
-			String defaultName = player.getName() + "_sheet";
-			sheet = new CharacterSheet(defaultName, 1f);
-			manager.save(sheet);
-			manager.assignSheet(playerId, defaultName);
-			player.sendMessage(ChatColor.DARK_GRAY + "No sheet found. Created default sheet " + ChatColor.WHITE + defaultName);
+		String normalizedName = "";
+		
+		if ( sheet == null)
+			player.sendMessage(NamedTextColor.DARK_RED + "No sheet found.");
+		if (sheet != null) {
+			normalizedName = normalizeStatName(statName);
+			Stat stat = sheet.getStat(normalizedName);
+			if (stat == null) {
+				player.sendMessage(NamedTextColor.RED + "Stat '" + statName + "' not found on your sheet.");
+				return 0;
+			}
+			baseModifier = sheet.getModifier(normalizedName);
+			profBonus += stat.getProficiency();
+			advState += stat.getAdvantage();
 		}
 		
-		String normalizedName = normalizeStatName(statName);
-		Stat stat = sheet.getStat(normalizedName);
-		if (stat == null) {
-			player.sendMessage(ChatColor.RED + "Stat '" + statName + "' not found on your sheet.");
-			return 0;
+	// Roll and account for Advantage / Disadvantage.
+		List<Integer> rolls = new ArrayList<>();
+		rolls.add(rng.nextInt(20) + 1);
+		
+		// We need to roll extra dice and sort them accordingly if we have Advantage / Disadvantage.
+		// We allow multiple Advantage / Disadvantage stacks here for now because homebrew rules.
+		if (advState != 0) {
+			for (int i = Math.abs(advState); i > 0; i -= 1) {
+				rolls.add(rng.nextInt(20) + 1);
+			}
+			if (advState > 0) rolls.sort(null);
+			if (advState < 0) rolls.sort(Collections.reverseOrder());
 		}
-		
-		int baseModifier = sheet.getModifier(normalizedName);
-		int profBonus = stat.getProficiency();
-		int advState = stat.getAdvantage();
-		
-		// Roll 1d20, account for advantage/disadvantage
-		int roll1 = rng.nextInt(20) + 1;
-		int roll2 = (advState != 0) ? rng.nextInt(20) + 1 : roll1;
-		int finalRoll = roll1;
-		if (advState == 1) finalRoll = Math.max(roll1, roll2);
-		if (advState == -1) finalRoll = Math.min(roll1, roll2);
-		
-		List<Integer> rolls = advState != 0 ? List.of(roll1, roll2) : List.of(roll1);
 		
 		sendRollMessage(player, normalizedName, rolls, baseModifier, profBonus, advState);
 		return 1;
 	}
 	
-	/**
-	 * Unified function to send roll output
-	 */
-	private void sendRollMessage(Player player, String label, List<Integer> rolls, int modifier, int profBonus) {
-		sendRollMessage(player, label, rolls, modifier, profBonus, 0);
+	private void sendRollMessage(Player player, String label, List<Integer> rolls, int modifier, int profBonus, int advState) {
+		sendRollMessage(player, label, rolls, 1, 20, modifier, profBonus, 0);
 	}
 	
-	private void sendRollMessage(Player player, String label, List<Integer> rolls, int modifier, int profBonus, int advState) {
+	private void sendRollMessage(Player player, String label, List<Integer> rolls, int min, int max, int modifier, int profBonus, int advState) {
 		StringBuilder rollsText = new StringBuilder();
 		for (int i = 0; i < rolls.size(); i++) {
 			int val = rolls.get(i);
-			ChatColor rollColor = (val == 20) ? ChatColor.GOLD : (val == 1) ? ChatColor.DARK_AQUA : ChatColor.WHITE;
+			NamedTextColor rollColor = (val == 20) ? NamedTextColor.GOLD : (val == 1) ? NamedTextColor.DARK_RED : NamedTextColor.WHITE;
 			rollsText.append(rollColor).append(val);
-			if (i < rolls.size() - 1) rollsText.append(ChatColor.DARK_GRAY).append(", ");
+			if (i < rolls.size() - 1) rollsText.append(NamedTextColor.DARK_GRAY).append(", ");
 		}
 		
-		String advText = advState == 1 ? " (Adv)" : advState == -1 ? " (Dis)" : "";
-		String profText = profBonus != 0 ? (profBonus > 0 ? " +" : " ") + profBonus + " prof" : "";
+		String advText = advState > 0 ? NamedTextColor.DARK_GREEN+ " (Adv)" : advState < 0 ? NamedTextColor.DARK_RED+ " (Dis)" : "";
+		String profText = profBonus != 0 ? (profBonus > 0 ? NamedTextColor.DARK_GREEN+ " +" : NamedTextColor.DARK_RED+ " -") + profBonus + " prof" : "";
 		
-		int total = rolls.get(0);
-		if (rolls.size() > 1) total = advState == 1 ? Math.max(rolls.get(0), rolls.get(1)) : Math.min(rolls.get(0), rolls.get(1));
-		total += modifier + profBonus;
+		int total = rolls.stream().mapToInt(Integer::intValue).sum() + ((modifier + profBonus) * rolls.size());
 		
 		String modText = "";
 		if (modifier != 0) {
-			ChatColor modColor = (modifier > 0) ? ChatColor.GREEN : ChatColor.DARK_RED;
-			modText = modColor + Integer.toString(modifier) + ChatColor.DARK_GRAY;
+			NamedTextColor modColor = (modifier > 0) ? NamedTextColor.GREEN : NamedTextColor.DARK_RED;
+			modText = modColor + Integer.toString(modifier) + NamedTextColor.DARK_GRAY;
 		}
 		
 		String profBonusText = "";
 		if (profBonus != 0) {
-			ChatColor profColor = (profBonus > 0) ? ChatColor.GREEN : ChatColor.DARK_RED;
-			profBonusText = profColor + Integer.toString(profBonus) + ChatColor.DARK_GRAY;
+			NamedTextColor profColor = (profBonus > 0) ? NamedTextColor.GREEN : NamedTextColor.DARK_RED;
+			profBonusText = profColor + Integer.toString(profBonus) + NamedTextColor.DARK_GRAY;
 		}
 		
-		player.sendMessage(ChatColor.DARK_GRAY + label + " rolled - " + rollsText + advText + profText);
-		player.sendMessage(ChatColor.DARK_GRAY + "Total " +
-			(modText.isEmpty() ? "" : "(+mod " + modText + ") ") +
-			(profBonusText.isEmpty() ? "" : "(+prof " + profBonusText + ") ") +
-			"= " + ChatColor.GOLD + total);
+	// Output the actual chat text: //
+		Bukkit.getServer().sendRichMessage(player.getName()+ " rolled " + label + ": " + rollsText + advText + profText);
+		Bukkit.getServer().sendRichMessage(NamedTextColor.GRAY + "Total " +
+			(modText.isEmpty() ? "" : "(mod " + modText + ") ") +
+			(profBonusText.isEmpty() ? "" : "(prof " + profBonusText + ") ") +
+			"= " + NamedTextColor.GOLD + total);
 	}
 	
-	/**
-	 * Normalize stat input to match CharacterSheet keys
-	 */
+// Normalize stat input to match CharacterSheet keys
 	private String normalizeStatName(String input) {
 		String[] parts = input.trim().toLowerCase().split(" ");
 		StringBuilder sb = new StringBuilder();

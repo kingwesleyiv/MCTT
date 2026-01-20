@@ -11,7 +11,6 @@ import java.util.UUID;
 
 public class CharacterSheet_Manager {
     
-    private final MCTT plugin;
     private final File sheetsFile;
     private final YamlConfiguration config;
     
@@ -20,7 +19,6 @@ public class CharacterSheet_Manager {
     private final Map<UUID, String> assignments = new HashMap<>();
     
     public CharacterSheet_Manager(MCTT plugin) {
-        this.plugin = plugin;
         this.sheetsFile = new File(plugin.getDataFolder(), "sheets.yml");
         if (!sheetsFile.exists()) {
             try {
@@ -142,7 +140,7 @@ public class CharacterSheet_Manager {
             config.save(sheetsFile);
             return true;
         } catch (IOException e) {
-            plugin.getLogger().warning("Failed to save sheets.yml: " + e.getMessage());
+            MCTT.get().getLogger().warning("Failed to save sheets.yml: " + e.getMessage());
             return false;
         }
     }

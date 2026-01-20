@@ -1,6 +1,7 @@
 package lgs.mctt;
 
 import com.mojang.brigadier.arguments.FloatArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
@@ -21,6 +22,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scoreboard.Team;
 import org.jetbrains.annotations.NotNull;
@@ -28,40 +30,58 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.EventListener;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 public final class MCTT extends JavaPlugin {
-//*********************************************************************************************************
+	
+	private static MCTT pluginInstance;
+	private static CharacterSheet_Manager charMGR;
+	
+	private StartCombat_Command combatCMD;
+	private Trace_Command traceCMD;
+	public static Roll_Command rollCMD;
+	private CharacterSheet_Command charCMD;
+	private PossessionHandler possessHandler;
+	
+	@Override
+	public void onLoad() {
+		pluginInstance = this;
+		
+		// SAFE: plugin now exists
+		charMGR = new CharacterSheet_Manager(this);
+		rollCMD = new Roll_Command(charMGR);
+		
+		getLogger().info("Loading...");
+	}
+	
+	@Override
+	public void onEnable() {
+		// instance fields that need 'this'
+		combatCMD = new StartCombat_Command(this);
+		traceCMD = new Trace_Command();
+		charCMD = new CharacterSheet_Command(charMGR);
+		possessHandler = new PossessionHandler(this);
+		
+		buildCommands();
+		
+		getServer().getPluginManager().registerEvents(new Event_Listener(), this);
+		new Emitter_Task().runTaskTimer(this, 1000L, 2L);
+		
+		getLogger().info("MCTT Enabled!");
+	}
+	
+	public static CharacterSheet_Manager charMGR() {
+		return charMGR;
+	}
 
-private final CharacterSheet_Manager charMGR = new CharacterSheet_Manager(this);
-private final StartCombat_Command combatCMD = new StartCombat_Command(this);
-private final Trace_Command traceCMD = new Trace_Command();
-private final Roll_Command rollCMD = new Roll_Command(this, charMGR);
-private final CharacterSheet_Command charCMD = new CharacterSheet_Command(this, charMGR);
-private final PossessionHandler possessHandler = new PossessionHandler(this);
 
 @Override
-public void onEnable() {
-	getLogger().info("Loading...");
-	buildCommands();
-	
-	// Implement Event Listener
-	getServer().getPluginManager().registerEvents(new Event_Listener(), this);
-	new Emitter_Task().runTaskTimer(this, 1000L, 2L);
-	//new StateMachine().runTaskTimer(this, 0L, 1L);
-	
-}
-	
-@Override
-public void onLoad() {
-	
-	getLogger().info("MC Tabletop Loaded!");
-}
+public void onDisable() { }
 
-@Override
-public void onDisable() {
+public static MCTT get() {return pluginInstance;}
 
-}
+// Command Building // ***********************************************************************************************
 
 private void buildCommands() {
 	LiteralArgumentBuilder<CommandSourceStack> possessCMD = Commands.literal("possess")
@@ -73,11 +93,13 @@ private void buildCommands() {
 				possessHandler.stopPossessing(player);
 				return 1;}
 			// Otherwise, try to possess entity in sight
-			Entity target = player.getTargetEntity(10);
-			if (target != null) {
-				possessHandler.handlePossess(player, target);
-			} else {
-				player.sendActionBar(Component.text("No Entity in Sight").color(NamedTextColor.RED));
+			Entity target;
+			try {
+				target = player.rayTraceEntities(10).getHitEntity();
+				if (target != null) possessHandler.handlePossess(player, target);
+				else player.sendActionBar(Component.text("No Entity.").color(NamedTextColor.BLACK));
+			} catch (Exception e) {
+				player.sendActionBar(Component.text("Command Error.").color(NamedTextColor.DARK_RED));
 			}
 			return 1;
 		})
@@ -101,23 +123,65 @@ private void buildCommands() {
 					Player player = (Player) ctx.getSource().getSender();
 					int count = (int) FloatArgumentType.getFloat(ctx, "count");
 					int sides = (int) FloatArgumentType.getFloat(ctx, "sides");
-					return this.rollCMD.rollDice(player, count, sides);
+					return MCTT.rollCMD.rollDice(player, count, sides);
 				})
 			)
 		)
-		// stat form: /r <stat>
+		// roll from stat (d20) /r <stat>
 		.then(Commands.argument("stat", StringArgumentType.word())
 			.executes(ctx -> {
 				Player player = (Player) ctx.getSource().getSender();
 				String stat = StringArgumentType.getString(ctx, "stat");
-				return this.rollCMD.rollStat(player, stat);
+				return MCTT.rollCMD.rollStat(player, stat, 0, 0);
+			})
+		).then(Commands.argument("bonus", IntegerArgumentType.integer())
+			.executes(ctx -> {
+				Player player = (Player) ctx.getSource().getSender();
+				String stat = StringArgumentType.getString(ctx, "stat");
+				int bonus = IntegerArgumentType.getInteger(ctx, "bonus");
+				return MCTT.rollCMD.rollStat(player, stat, bonus, 0);
+			})
+		).then(Commands.argument("advantage", IntegerArgumentType.integer())
+			.executes(ctx -> {
+				Player player = (Player) ctx.getSource().getSender();
+				String stat = StringArgumentType.getString(ctx, "stat");
+				int bonus = IntegerArgumentType.getInteger(ctx, "bonus");
+				int advantage = IntegerArgumentType.getInteger(ctx, "advantage");
+				return MCTT.rollCMD.rollStat(player, stat, bonus, advantage);
 			})
 		);
 	
 	
-	// Combat Command for toggling players mode on entities.
+	// Combat Command for toggling combat mode on entities.
 	LiteralArgumentBuilder<CommandSourceStack> combatCMD = Commands.literal("combat")
 		.executes(ctx -> { return this.combatCMD.onCommand(ctx.getSource().getSender(), null); })
+		.then(Commands.literal("initiative")
+			.then(Commands.argument("entity", ArgumentTypes.entities())
+				.executes(ctx -> {
+					final EntitySelectorArgumentResolver selector =
+						ctx.getArgument("entity", EntitySelectorArgumentResolver.class);
+					final List<Entity> entities = selector.resolve(ctx.getSource());
+					
+					for (Entity e : entities) {
+						this.combatCMD.forceInitiative(e, 0);
+					}
+					return 1;
+				})
+				.then(Commands.argument("modifier", IntegerArgumentType.integer())
+					.executes(ctx -> {
+						final EntitySelectorArgumentResolver selector =
+							ctx.getArgument("entity", EntitySelectorArgumentResolver.class);
+						final List<Entity> entities = selector.resolve(ctx.getSource());
+						int mod = IntegerArgumentType.getInteger(ctx, "modifier");
+						
+						for (Entity e : entities) {
+							this.combatCMD.forceInitiative(e, mod);
+						}
+						return 1;
+					})
+				)
+			)
+		)
 		.then(Commands.argument("entity", ArgumentTypes.entities())
 			.executes(ctx -> {
 				final EntitySelectorArgumentResolver selector = ctx.getArgument("entity", EntitySelectorArgumentResolver.class);
@@ -225,7 +289,7 @@ private void buildCommands() {
 // Hide an entity from a specific player.
 public static void HideEntityFrom(Entity entity, Player player)
 {
-	player.hideEntity(MCTT.getPlugin(MCTT.class), entity);
+	player.hideEntity(MCTT.get(), entity);
 }
 
 // Hide an entity from all player except an input list.
@@ -233,13 +297,13 @@ public static void HideEntityExcept(Entity entity, List<Player> players)
 {
 	if(players.isEmpty()){return;}
 	for(Player player : entity.getWorld().getPlayers())
-		player.hideEntity(MCTT.getPlugin(MCTT.class), entity);
+		player.hideEntity(MCTT.get(), entity);
 }
 
 public static void HideEntityExcept(Entity entity)
 {
 	for(Player player : entity.getWorld().getPlayers())
-		player.hideEntity(MCTT.getPlugin(MCTT.class), entity);
+		player.hideEntity(MCTT.get(), entity);
 }
 
 // Show an entity to a specific player, or to all players if player is null.
@@ -247,21 +311,27 @@ public static void ShowEntityTo(Entity entity, @Nullable Player player)
 {
 	if(entity == null) return;
 	if(player != null){
-		player.showEntity(MCTT.getPlugin(MCTT.class), entity);
+		player.showEntity(MCTT.get(), entity);
 	}else{
 		for(Player p : entity.getWorld().getPlayers()){
-			p.showEntity(MCTT.getPlugin(MCTT.class), entity);
+			p.showEntity(MCTT.get(), entity);
 		}
 	}
 }
 
 // Is this player a Dungeon Master?
-public static boolean isDM(Player player) {
-	return Bukkit.getScoreboardManager().getMainScoreboard().getPlayerTeam(player).getName() == "DM"; }
+public static boolean isDM(Player player)
+{
+	if (player == null) return false;
+	return player.teamDisplayName().toString().contains("DM");
+}
 	
 // Is this player a Player Character?
-public static boolean isPC(Player player) {
-	return Bukkit.getScoreboardManager().getMainScoreboard().getPlayerTeam(player).getName() == "DM"; }
+public static boolean isPC(Player player)
+{
+	if (player == null) return false;
+	return player.teamDisplayName().toString().contains("players");
+}
 
 	
 	

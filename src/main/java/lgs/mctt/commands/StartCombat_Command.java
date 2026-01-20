@@ -1,5 +1,8 @@
 package lgs.mctt.commands;
 
+import lgs.mctt.MCTT;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
@@ -8,17 +11,20 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
-import org.jetbrains.annotations.Nullable;
+import org.bukkit.scoreboard.*;
 
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class StartCombat_Command{
 
 	private final JavaPlugin plugin;
 	private final Set<LivingEntity> combatEntities = new HashSet<>();
+	// Scoreboard objective for tracking initiative
+	private Objective initScoreObjective;
+	private final Map<UUID, Integer> initiativeRolls = new HashMap<>();
+	private final Map<UUID, String> initiativeNames = new HashMap<>();
+	
 	private BukkitTask combatTask;
 
 	// Modifier names for attribute modifiers
@@ -33,8 +39,8 @@ public class StartCombat_Command{
 
 
 	public int onCommand(CommandSender sender, List<LivingEntity> target) {
-		if (!(sender instanceof Player player)) {
-			sender.sendMessage("§aOnly players can run this command!");
+		if (!(sender instanceof Player player && MCTT.isDM(player))) {
+			sender.sendMessage("§aOnly DMs can run this command!");
 			return 0;
 		}
 		
@@ -80,6 +86,8 @@ public class StartCombat_Command{
 		}
 		
 		player.sendMessage("§ePaused " + combatEntities.size() + " entities.");
+		initScoreboard();
+		rollInitiative((MCTT) plugin);
 	}
 
 	// Add entity to frozen set and start freeze task if needed
@@ -126,11 +134,12 @@ public class StartCombat_Command{
 	}
 	
 	private void stopCombat() {
+		clearInitiative();
+		
 		if (combatTask != null) {
 			combatTask.cancel();
 			combatTask = null;
 		}
-		
 		for (LivingEntity entity : new HashSet<>(combatEntities)) {
 			if (!entity.isValid()) continue;
 			unpauseEntity(entity);
@@ -138,5 +147,95 @@ public class StartCombat_Command{
 		
 		combatEntities.clear();
 	}
+	
+	private void initScoreboard() {
+		Scoreboard board = Bukkit.getScoreboardManager().getMainScoreboard();
+		
+		if (initScoreObjective != null) {
+			initScoreObjective.unregister();
+		}
+		
+		initScoreObjective = board.registerNewObjective(
+			"initiative",
+			Criteria.DUMMY,
+			Component.text("Initiative").color(NamedTextColor.GOLD)
+		);
+		
+		initScoreObjective.setDisplaySlot(DisplaySlot.SIDEBAR);
+		initiativeRolls.clear();
+	}
+	
+	private void rollInitiative(MCTT plugin) {
+		if (initScoreObjective == null) return;
+		
+		List<Map.Entry<Player, Integer>> results = new ArrayList<>();
+		
+		for (Entity e : combatEntities) {
+			if (!(e instanceof Player player)) continue;
+			if (!MCTT.isPC(player)) continue;
+			
+			int roll = MCTT.rollCMD.rollStat(player, "Initiative", 0, 0);
+			initiativeRolls.put(player.getUniqueId(), roll);
+			results.add(Map.entry(player, roll));
+		}
+		
+		results.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
+		
+		for (Map.Entry<Player, Integer> entry : results) {
+			initScoreObjective
+				.getScore(entry.getKey().getName())
+				.setScore(entry.getValue());
+		}
+	}
+	
+	public void clearInitiative() {
+		if (initScoreObjective != null) {
+			initScoreObjective.unregister();
+			initScoreObjective = null;
+		}
+		initiativeRolls.clear();
+	}
+	
+	public void forceInitiative(Entity entity, int modifier) {
+		if (initScoreObjective == null) return;
+		
+		int roll;
+		
+		if (entity instanceof Player player && MCTT.isPC(player)) {
+			roll = MCTT.rollCMD.rollStat(player, "Initiative", 0, 0);
+		} else {
+			roll = ThreadLocalRandom.current().nextInt(1, 21);
+		}
+		
+		roll += modifier;
+		
+		String entryName = entity.getName();
+		
+		initScoreObjective.getScore(entryName).setScore(roll);
+	}
+
+public String getInitiativeName(Entity entity) {
+	return initiativeNames.computeIfAbsent(entity.getUniqueId(), id -> {
+		String base = entity instanceof Player p
+			              ? p.getName() : entity.getType().name();
+		
+		// Try to use the main scoreboard to ensure uniqueness; fall back to UUID short if unavailable
+		ScoreboardManager mgr = Bukkit.getScoreboardManager();
+		Scoreboard board = mgr != null ? mgr.getMainScoreboard() : null;
+		
+		String name = base;
+		int i = 0;
+		
+		if (board != null) {
+			while (board.getEntries().contains(name)) {
+				name = base + i++;
+			}
+		} else {
+			// No scoreboard available (unlikely) - append part of the UUID to ensure uniqueness
+			name = base + "-" + id.toString().substring(0, 8);
+		}
+		return name;
+	});
+}
 	
 }

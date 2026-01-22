@@ -17,6 +17,9 @@
 - [ ] Scale the player when possessing different sized entities. (May require manual case list.)
 - [ ] Add commands for flight speed.
 - [ ] Add commands for flight mode.
+- [ ] Add sphere / circle particle distance measuring (In FT for D&D terms)
+  - [ ] Add cone and cube measuring.
 
 ## Bugfix
 
+- [] Distance trace does not produce "Marker".

@@ -4,9 +4,9 @@ import lgs.mctt.MCTT;
 import lgs.mctt.characters.CharacterSheet;
 import lgs.mctt.characters.CharacterSheet_Manager;
 import lgs.mctt.characters.Stat;
-import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 
 import java.util.*;
@@ -25,7 +25,7 @@ public class Roll_Command {
 	 */
 	public int rollDice(Player player, int count, int sides) {
 		if (count < 1 || sides < 1) {
-			player.sendMessage(NamedTextColor.RED + "Invalid dice. Usage: /r <count> <sides>");
+			player.sendMessage(ChatColor.RED + "Invalid dice. Usage: /r <count> <sides>");
 			return 0;
 		}
 		
@@ -51,12 +51,12 @@ public class Roll_Command {
 		String normalizedName = "";
 		
 		if ( sheet == null)
-			player.sendMessage(NamedTextColor.DARK_RED + "No sheet found.");
+			player.sendMessage(ChatColor.DARK_RED + "No sheet found.");
 		if (sheet != null) {
 			normalizedName = normalizeStatName(statName);
 			Stat stat = sheet.getStat(normalizedName);
 			if (stat == null) {
-				player.sendMessage(NamedTextColor.RED + "Stat '" + statName + "' not found on your sheet.");
+				player.sendMessage(ChatColor.RED + "Stat '" + statName + "' not found on your sheet.");
 				return 0;
 			}
 			baseModifier = sheet.getModifier(normalizedName);
@@ -90,34 +90,34 @@ public class Roll_Command {
 		StringBuilder rollsText = new StringBuilder();
 		for (int i = 0; i < rolls.size(); i++) {
 			int val = rolls.get(i);
-			NamedTextColor rollColor = (val == 20) ? NamedTextColor.GOLD : (val == 1) ? NamedTextColor.DARK_RED : NamedTextColor.WHITE;
+			ChatColor rollColor = (val == 20) ? ChatColor.GOLD : (val == 1) ? ChatColor.DARK_RED : ChatColor.WHITE;
 			rollsText.append(rollColor).append(val);
-			if (i < rolls.size() - 1) rollsText.append(NamedTextColor.DARK_GRAY).append(", ");
+			if (i < rolls.size() - 1) rollsText.append(ChatColor.DARK_GRAY).append(", ");
 		}
 		
-		String advText = advState > 0 ? NamedTextColor.DARK_GREEN+ " (Adv)" : advState < 0 ? NamedTextColor.DARK_RED+ " (Dis)" : "";
-		String profText = profBonus != 0 ? (profBonus > 0 ? NamedTextColor.DARK_GREEN+ " +" : NamedTextColor.DARK_RED+ " -") + profBonus + " prof" : "";
+		String advText = advState > 0 ? ChatColor.DARK_GREEN+ " (Adv)" : advState < 0 ? ChatColor.DARK_RED+ " (Dis)" : "";
+		String profText = profBonus != 0 ? (profBonus > 0 ? ChatColor.DARK_GREEN+ " +" : ChatColor.DARK_RED+ " -") + profBonus + " prof" : "";
 		
 		int total = rolls.stream().mapToInt(Integer::intValue).sum() + ((modifier + profBonus) * rolls.size());
 		
 		String modText = "";
 		if (modifier != 0) {
-			NamedTextColor modColor = (modifier > 0) ? NamedTextColor.GREEN : NamedTextColor.DARK_RED;
-			modText = modColor + Integer.toString(modifier) + NamedTextColor.DARK_GRAY;
+			ChatColor modColor = (modifier > 0) ? ChatColor.GREEN : ChatColor.DARK_RED;
+			modText = modColor + Integer.toString(modifier) + ChatColor.DARK_GRAY;
 		}
 		
 		String profBonusText = "";
 		if (profBonus != 0) {
-			NamedTextColor profColor = (profBonus > 0) ? NamedTextColor.GREEN : NamedTextColor.DARK_RED;
-			profBonusText = profColor + Integer.toString(profBonus) + NamedTextColor.DARK_GRAY;
+			ChatColor profColor = (profBonus > 0) ? ChatColor.GREEN : ChatColor.DARK_RED;
+			profBonusText = profColor + Integer.toString(profBonus) + ChatColor.DARK_GRAY;
 		}
 		
 	// Output the actual chat text: //
 		Bukkit.getServer().sendRichMessage(player.getName()+ " rolled " + label + ": " + rollsText + advText + profText);
-		Bukkit.getServer().sendRichMessage(NamedTextColor.GRAY + "Total " +
+		Bukkit.getServer().sendRichMessage(ChatColor.GRAY + "Total " +
 			(modText.isEmpty() ? "" : "(mod " + modText + ") ") +
 			(profBonusText.isEmpty() ? "" : "(prof " + profBonusText + ") ") +
-			"= " + NamedTextColor.GOLD + total);
+			"= " + ChatColor.GOLD + total);
 	}
 	
 // Normalize stat input to match CharacterSheet keys

@@ -2,11 +2,15 @@ package lgs.mctt.util;
 
 import lgs.mctt.MCTT;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.*;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.*;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
 
@@ -14,7 +18,7 @@ import java.util.*;
 
 public final class Raycaster {
 	
-	private static final Map<UUID, BlockDisplay> playerMarkers = new HashMap<>();
+	private static final Map<UUID, ArmorStand> playerMarkers = new HashMap<>();
 	
 	public static RayTraceResult spawnParticleBeam(Player player, double maxDistance) {
 		float spacing = 0.5f;
@@ -81,23 +85,23 @@ public final class Raycaster {
 		}
 		
 		if (hit) {// Spawn or teleport the marker entity.
-			manageMarkerEntity(player, end.subtract(0, 0.7,0));
-		} else {// Spawn crit particles at end point.
+			manageMarkerEntity(player, end.add(0,-0.5,0), (float)(totalDistance * 3.28084));
+		} else {
 			world.spawnParticle(Particle.CRIT, feet, 20, 0.3, 0.3, 0.3, 0.01);
 		}
 		
 		return result;
 	}
 	
-	private static void manageMarkerEntity(Player player, Location target) {
+	private static void manageMarkerEntity(Player player, Location target, float distanceFeet) {
 		UUID id = player.getUniqueId();
-		BlockDisplay marker = playerMarkers.get(id);
+		ArmorStand marker = playerMarkers.get(id);
 		
 		if (marker == null) {
-			marker = target.getWorld().spawn(target, BlockDisplay.class, markerEntity -> {
-				markerEntity.setBlock(Material.GLASS.createBlockData());
-				markerEntity.setDisplayWidth(0.1f);
-				//markerEntity.setItem(EquipmentSlot.HEAD, new ItemStack(Material.GLASS));
+			marker = target.getWorld().spawn(target, ArmorStand.class, markerEntity -> {
+				markerEntity.setMarker(true);
+				markerEntity.customName(Component.text(Math.round(distanceFeet) + " ft").color(NamedTextColor.LIGHT_PURPLE));
+				markerEntity.setCustomNameVisible(true);
 			});
 			
 			
@@ -106,18 +110,19 @@ public final class Raycaster {
 			// Make invisible to all players except the owner
 			MCTT.HideEntityExcept(marker, Collections.singletonList(player));
 			
-			final BlockDisplay markerRef = marker;
+			final ArmorStand markerRef = marker;
 			// Schedule removal after 10s if not refreshed
 			Bukkit.getScheduler().runTaskLater(MCTT.getPlugin(MCTT.class), () -> {
-				BlockDisplay current = playerMarkers.get(id);
+				ArmorStand current = playerMarkers.get(id);
 				if (current != null && current.equals(markerRef) && !current.isDead() && current.isValid()) {
 					current.remove();
 					playerMarkers.remove(id);
 				}
-			}, 20L * 10);
+			}, 20L * 20);
 			
 		} else {
 			marker.teleport(target);
+			marker.customName(Component.text(Math.round(distanceFeet) + " ft").color(NamedTextColor.LIGHT_PURPLE));
 		}
 	}
 	

@@ -4,6 +4,8 @@ import lgs.mctt.MCTT;
 import lgs.mctt.characters.CharacterSheet;
 import lgs.mctt.characters.CharacterSheet_Manager;
 import lgs.mctt.characters.Stat;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -36,7 +38,7 @@ public class Roll_Command {
 		
 		int total = rolls.stream().mapToInt(Integer::intValue).sum();
 		
-		sendRollMessage(player, "d" + sides, rolls, 0, 0, 0);
+		sendRollMessage(player, "d" + sides, rolls, 0, 1, sides);
 		return 1;
 	}
 	
@@ -50,9 +52,11 @@ public class Roll_Command {
 		CharacterSheet sheet = manager.getAssignedSheet(playerId);
 		String normalizedName = "";
 		
-		if ( sheet == null)
+		if ( sheet == null) {
 			player.sendMessage(ChatColor.DARK_RED + "No sheet found.");
-		if (sheet != null) {
+			return 0;
+		}
+		else {
 			normalizedName = normalizeStatName(statName);
 			Stat stat = sheet.getStat(normalizedName);
 			if (stat == null) {
@@ -82,42 +86,71 @@ public class Roll_Command {
 		return 1;
 	}
 	
-	private void sendRollMessage(Player player, String label, List<Integer> rolls, int modifier, int profBonus, int advState) {
-		sendRollMessage(player, label, rolls, 1, 20, modifier, profBonus, 0);
+	private void sendRollMessage(Player player, String label, List<Integer> rolls, int modifier, int min, int max) {
+		sendRollMessage(player, label, rolls, modifier, 0, 0, min, max);
 	}
-	
-	private void sendRollMessage(Player player, String label, List<Integer> rolls, int min, int max, int modifier, int profBonus, int advState) {
-		StringBuilder rollsText = new StringBuilder();
+
+	private void sendRollMessage(Player player, String label, List<Integer> rolls, int modifier, int profBonus, int advState, int min, int max) {
+		// Build the colored rolls component
+		Component rollsComponent = Component.empty();
 		for (int i = 0; i < rolls.size(); i++) {
 			int val = rolls.get(i);
-			ChatColor rollColor = (val == 20) ? ChatColor.GOLD : (val == 1) ? ChatColor.DARK_RED : ChatColor.WHITE;
-			rollsText.append(rollColor).append(val);
-			if (i < rolls.size() - 1) rollsText.append(ChatColor.DARK_GRAY).append(", ");
+			NamedTextColor rollColor = (val == max) ? NamedTextColor.YELLOW : (val == min) ? NamedTextColor.RED : NamedTextColor.WHITE;
+			rollsComponent = rollsComponent.append(Component.text(Integer.toString(val), rollColor));
+			if (i < rolls.size() - 1) {
+				rollsComponent = rollsComponent.append(Component.text(", ", NamedTextColor.DARK_GRAY));
+			}
 		}
 		
-		String advText = advState > 0 ? ChatColor.DARK_GREEN+ " (Adv)" : advState < 0 ? ChatColor.DARK_RED+ " (Dis)" : "";
-		String profText = profBonus != 0 ? (profBonus > 0 ? ChatColor.DARK_GREEN+ " +" : ChatColor.DARK_RED+ " -") + profBonus + " prof" : "";
+		// Advantage / Disadvantage component
+		Component advComponent = advState > 0
+			? Component.text(" (Adv)", NamedTextColor.DARK_GREEN)
+			: advState < 0
+			? Component.text(" (Dis)", NamedTextColor.DARK_RED)
+			: Component.empty();
+		
+		// Proficiency component
+		Component profComponent = Component.empty();
+		if (profBonus != 0) {
+			NamedTextColor profColor = (profBonus > 0) ? NamedTextColor.DARK_GREEN : NamedTextColor.DARK_RED;
+			profComponent = Component.text((profBonus > 0 ? " +" : " -") + Math.abs(profBonus) + " prof", profColor);
+		}
+		
+		// Compose and send the roll line
+		Component header = Component
+			.text(player.getName() + " rolled " + label + ": ", NamedTextColor.GRAY)
+			.append(rollsComponent)
+			.append(advComponent)
+			.append(profComponent);
+		
+		Bukkit.getServer().sendMessage(header);
+		
+		// Total line: include optional (mod ...) and (prof ...) segments
+		Component modsComponent = Component.empty();
+		if (modifier != 0) {
+			NamedTextColor modColor = (modifier > 0) ? NamedTextColor.GREEN : NamedTextColor.DARK_RED;
+			modsComponent = modsComponent
+				.append(Component.text("(mod ", NamedTextColor.GRAY))
+				.append(Component.text(Integer.toString(modifier), modColor))
+				.append(Component.text(") ", NamedTextColor.GRAY));
+		}
+		if (profBonus != 0) {
+			NamedTextColor profColor = (profBonus > 0) ? NamedTextColor.GREEN : NamedTextColor.DARK_RED;
+			modsComponent = modsComponent
+				.append(Component.text("(prof ", NamedTextColor.GRAY))
+				.append(Component.text(Integer.toString(profBonus), profColor))
+				.append(Component.text(") ", NamedTextColor.GRAY));
+		}
 		
 		int total = rolls.stream().mapToInt(Integer::intValue).sum() + ((modifier + profBonus) * rolls.size());
 		
-		String modText = "";
-		if (modifier != 0) {
-			ChatColor modColor = (modifier > 0) ? ChatColor.GREEN : ChatColor.DARK_RED;
-			modText = modColor + Integer.toString(modifier) + ChatColor.DARK_GRAY;
-		}
+		Component totalComponent = Component
+			.text("Total ", NamedTextColor.GRAY)
+			.append(modsComponent)
+			.append(Component.text("= ", NamedTextColor.GRAY))
+			.append(Component.text(Integer.toString(total), NamedTextColor.GOLD));
 		
-		String profBonusText = "";
-		if (profBonus != 0) {
-			ChatColor profColor = (profBonus > 0) ? ChatColor.GREEN : ChatColor.DARK_RED;
-			profBonusText = profColor + Integer.toString(profBonus) + ChatColor.DARK_GRAY;
-		}
-		
-	// Output the actual chat text: //
-		Bukkit.getServer().sendRichMessage(player.getName()+ " rolled " + label + ": " + rollsText + advText + profText);
-		Bukkit.getServer().sendRichMessage(ChatColor.GRAY + "Total " +
-			(modText.isEmpty() ? "" : "(mod " + modText + ") ") +
-			(profBonusText.isEmpty() ? "" : "(prof " + profBonusText + ") ") +
-			"= " + ChatColor.GOLD + total);
+		Bukkit.getServer().sendMessage(totalComponent);
 	}
 	
 // Normalize stat input to match CharacterSheet keys

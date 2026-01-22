@@ -297,7 +297,10 @@ public static void HideEntityExcept(Entity entity, List<Player> players)
 {
 	if(players.isEmpty()){return;}
 	for(Player player : entity.getWorld().getPlayers())
-		player.hideEntity(MCTT.get(), entity);
+		for (Player p : players)
+			if (p.equals(player))
+				continue;
+	else player.hideEntity(MCTT.get(), entity);
 }
 
 public static void HideEntityExcept(Entity entity)

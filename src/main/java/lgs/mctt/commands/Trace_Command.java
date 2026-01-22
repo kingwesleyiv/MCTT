@@ -52,7 +52,7 @@ public class Trace_Command{
 			
 			// Display distance in feet above XP bar (action bar)
 			double distanceFeet = start.distance(ray.getHitPosition().toLocation(player.getWorld())) * 3.28084;
-			String message = String.format("Distance: %.1f ft", distanceFeet);
+			String message = String.format("Distance: %.0f ft", distanceFeet);
 			switch (
 				distanceFeet <= 10 ? 1 :
 				distanceFeet <= 15 ? 2 :

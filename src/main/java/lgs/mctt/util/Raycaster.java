@@ -56,7 +56,7 @@ public final class Raycaster {
 			end = waist.clone().add(dir.clone().multiply(maxDistance / 3.28084));
 		}
 		
-		Vector waistDir = end.subtract(waist).toVector().normalize();
+		Vector waistDir = end.clone().subtract(waist).toVector().normalize();
 		
 		// Particle Spawning
 		Particle.DustOptions dust = new Particle.DustOptions(Color.fromRGB(Trace_Command.getDistRGB(totalDistance)), 1f);
@@ -72,31 +72,27 @@ public final class Raycaster {
 	private void manageMarkerEntity(Player player, Location target, float distanceFeet, int distColor) {
 		UUID id = player.getUniqueId();
 		ArmorStand marker = playerMarkers.get(id);
-		
-		if (marker == null || marker.isDead()) {
+		if (marker == null) {
 			playerMarkers.remove(id);
-			marker = target.getWorld().spawn(target, ArmorStand.class, markerEntity -> {
+			ArmorStand newMarker = target.getWorld().spawn(target, ArmorStand.class, markerEntity -> {
 				markerEntity.customName(Component.text(Math.round(distanceFeet) + " ft").color(TextColor.color(distColor)).decoration(TextDecoration.BOLD, true));
 				markerEntity.setCustomNameVisible(true);
 				markerEntity.setMarker(true);
-				markerEntity.setInvisible(false);
+				markerEntity.setInvisible(true);
 			});
-			
-			playerMarkers.put(id, marker);
-			
-			// Make invisible to all players except the owner
-			MCTT.HideEntityExcept(marker, Collections.singletonList(player));
+			marker = newMarker;
+			playerMarkers.put(id, newMarker);
 			
 			// Schedule removal after 20s if not refreshed
 			Bukkit.getScheduler().runTaskLater(MCTT.getPlugin(MCTT.class), () -> {
-				ArmorStand current = playerMarkers.get(id);
+				try { playerMarkers.get(id).remove(); } catch (Exception e) { }
 				playerMarkers.remove(id);
-				if(current != null) current.remove();
 			}, 20L * 20); // 20 seconds at 20 ticks per second
 			
+		} else {
+			marker.teleport(target);
+			marker.customName(Component.text(Math.round(distanceFeet) + " ft").color(TextColor.color(distColor)).decoration(TextDecoration.BOLD, true));
 		}
-		marker.teleport(target);
-		marker.customName(Component.text(Math.round(distanceFeet) + " ft").color(TextColor.color(distColor)).decoration(TextDecoration.BOLD, true));
 	}
 	
 	private RayTraceResult raycastFromPlayerEye(Player player, double maxDistance, double raySize) {

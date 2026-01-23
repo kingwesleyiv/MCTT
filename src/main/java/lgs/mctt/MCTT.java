@@ -9,29 +9,19 @@ import io.papermc.paper.command.brigadier.Commands;
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
 import io.papermc.paper.command.brigadier.argument.resolvers.selector.EntitySelectorArgumentResolver;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
-import jdk.jfr.Event;
-import lgs.mctt.characters.CharacterSheet;
 import lgs.mctt.characters.CharacterSheet_Manager;
 import lgs.mctt.commands.*;
 import lgs.mctt.players.Event_Listener;
-import lgs.mctt.players.StateMachine;
 import lgs.mctt.world.Emitter_Task;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scoreboard.Team;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.EventListener;
 import java.util.List;
-import java.util.Objects;
-import java.util.UUID;
 
 public final class MCTT extends JavaPlugin {
 	
@@ -71,13 +61,13 @@ public final class MCTT extends JavaPlugin {
 		getLogger().info("MCTT Enabled!");
 	}
 	
-	public static CharacterSheet_Manager charMGR() {
-		return charMGR;
-	}
+	public static CharacterSheet_Manager charMGR() { return charMGR; }
 
 
 @Override
-public void onDisable() { }
+public void onDisable() {
+	this.traceCMD.raycaster.clearMarkers();
+}
 
 public static MCTT get() {return pluginInstance;}
 
@@ -118,6 +108,11 @@ private void buildCommands() {
 	LiteralArgumentBuilder<CommandSourceStack> rollCommand = Commands.literal("r")
 		// numeric dice form: /r <count> <sides>
 		.then(Commands.argument("count", FloatArgumentType.floatArg())
+			.executes(ctx -> {
+				Player player = (Player) ctx.getSource().getSender();
+				int count = (int) FloatArgumentType.getFloat(ctx, "count");
+				return MCTT.rollCMD.rollDice(player, 1, count);
+			})
 			.then(Commands.argument("sides", FloatArgumentType.floatArg())
 				.executes(ctx -> {
 					Player player = (Player) ctx.getSource().getSender();
@@ -127,28 +122,30 @@ private void buildCommands() {
 				})
 			)
 		)
-		// roll from stat (d20) /r <stat>
+		// roll from stat (d20) /r <stat> <bonus> <advantage>
 		.then(Commands.argument("stat", StringArgumentType.word())
 			.executes(ctx -> {
 				Player player = (Player) ctx.getSource().getSender();
 				String stat = StringArgumentType.getString(ctx, "stat");
 				return MCTT.rollCMD.rollStat(player, stat, 0, 0);
 			})
-		).then(Commands.argument("bonus", IntegerArgumentType.integer())
-			.executes(ctx -> {
-				Player player = (Player) ctx.getSource().getSender();
-				String stat = StringArgumentType.getString(ctx, "stat");
-				int bonus = IntegerArgumentType.getInteger(ctx, "bonus");
-				return MCTT.rollCMD.rollStat(player, stat, bonus, 0);
-			})
-		).then(Commands.argument("advantage", IntegerArgumentType.integer())
-			.executes(ctx -> {
-				Player player = (Player) ctx.getSource().getSender();
-				String stat = StringArgumentType.getString(ctx, "stat");
-				int bonus = IntegerArgumentType.getInteger(ctx, "bonus");
-				int advantage = IntegerArgumentType.getInteger(ctx, "advantage");
-				return MCTT.rollCMD.rollStat(player, stat, bonus, advantage);
-			})
+			.then(Commands.argument("bonus", IntegerArgumentType.integer())
+				.executes(ctx -> {
+					Player player = (Player) ctx.getSource().getSender();
+					String stat = StringArgumentType.getString(ctx, "stat");
+					int bonus = IntegerArgumentType.getInteger(ctx, "bonus");
+					return MCTT.rollCMD.rollStat(player, stat, bonus, 0);
+				})
+				.then(Commands.argument("advantage", IntegerArgumentType.integer())
+					.executes(ctx -> {
+						Player player = (Player) ctx.getSource().getSender();
+						String stat = StringArgumentType.getString(ctx, "stat");
+						int bonus = IntegerArgumentType.getInteger(ctx, "bonus");
+						int advantage = IntegerArgumentType.getInteger(ctx, "advantage");
+						return MCTT.rollCMD.rollStat(player, stat, bonus, advantage);
+					})
+				)
+			)
 		);
 	
 	
@@ -196,7 +193,11 @@ private void buildCommands() {
 	
 	// Trace Command for finding distances.
 	LiteralArgumentBuilder<CommandSourceStack> traceCMD = Commands.literal("trace")
-		.executes( ctx -> this.traceCMD.onCommand(ctx.getSource().getSender()) );
+		.then(Commands.argument("range (ft.)", IntegerArgumentType.integer())
+			.executes( ctx -> {
+				return this.traceCMD.onCommand(ctx.getSource().getSender(), IntegerArgumentType.getInteger(ctx, "range (ft.)"));
+			} )
+		);
 	
 	// Restore command for returning players to default state.
 	LiteralArgumentBuilder<CommandSourceStack> healCMD = Commands.literal("heal")

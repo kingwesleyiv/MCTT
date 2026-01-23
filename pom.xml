@@ -6,7 +6,7 @@
 
     <groupId>lgs</groupId>
     <artifactId>MCTT</artifactId>
-    <version>0.4.1</version>
+    <version>0.5</version>
     <packaging>jar</packaging>
 
     <name>MCTT</name>

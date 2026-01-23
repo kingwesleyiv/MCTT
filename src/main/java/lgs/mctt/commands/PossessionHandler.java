@@ -24,7 +24,7 @@ public class PossessionHandler {
 	private final Plugin plugin;
 	
 	/** player UUID -> active possession session */
-	private final Map<UUID, PossessionSession> activeSessions = new HashMap<>();
+	public final Map<UUID, PossessionSession> activeSessions = new HashMap<>();
 	
 	/** target UUID -> possessor player UUID */
 	private final Map<UUID, UUID> targetToPlayer = new HashMap<>();
@@ -35,7 +35,7 @@ public class PossessionHandler {
 		BukkitTask task,
 		long startedAt,
 		UUID sessionId
-	) {}
+	) { }
 	
 	public PossessionHandler(Plugin plugin) {
 		this.plugin = plugin;
@@ -61,7 +61,10 @@ public class PossessionHandler {
 		//if (cloneEntity == null) { player.sendMessage("§cFailed to clone entity."); return; }
 		
 		// Hide real target from possessor.
-		MCTT.HideEntityFrom(target, player);
+		if (target instanceof Player) {
+			MCTT.sendInvisTarget(player, (LivingEntity)target);
+		} else MCTT.HideEntityFrom(target, player);
+		
 		player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 1, false, false, false));
 		
 		// Toggle player physics/collision
@@ -79,7 +82,7 @@ public class PossessionHandler {
 			
 			Location loc = player.getLocation();
 			
-			// Teleport target + clone
+			// Teleport target
 			try { target.teleport(loc); target.setVelocity(new org.bukkit.util.Vector(0,0,0)); } catch (Exception ignored) {}
 			
 			// Copy main/off-hand if needed
@@ -108,6 +111,7 @@ public class PossessionHandler {
 		
 		MCTT.ShowEntityTo(session.target(), player);
 		MCTT.ShowEntityTo(session.player(), null);
+		if(session.target() instanceof Player) MCTT.removeInvisTarget(player, (LivingEntity)session.target());
 		
 		try {
 			session.target().setNoPhysics(false);
@@ -119,30 +123,13 @@ public class PossessionHandler {
 		player.sendActionBar(Component.text("The Possession Ends...").color(NamedTextColor.DARK_GRAY));
 	}
 	
-//	/** Clone entity with same class, copying equipment if living */
-//	private Entity cloneEntity(Entity original) {
-//		if (original == null || !original.isValid()) return null;
-//		World world = original.getWorld();
-//		Entity cloneEntity;
-//		try {
-//			cloneEntity = world.spawn(original.getLocation(), original.getType().getEntityClass());
-//		} catch (Exception ex) { return null; }
-//
-//		if (cloneEntity instanceof LivingEntity livingClone && original instanceof LivingEntity livingOrig) {
-//			try {
-//				livingClone.getEquipment().setItemInMainHand(livingOrig.getEquipment().getItemInMainHand());
-//				livingClone.getEquipment().setItemInOffHand(livingOrig.getEquipment().getItemInOffHand());
-//			} catch (Exception ignored) {}
-//			livingClone.setAI(false);
-//			livingClone.setCollidable(false);
-//		}
-//
-//		cloneEntity.teleport(original.getLocation().add(0, 0.01, 0));
-//		return cloneEntity;
-//	}
-	
-	/** Convenience: is player a DM */
-
+	public void stopAllPossessions() {
+		for (UUID u : new ArrayList<>(activeSessions.keySet())) {
+			Player p = Bukkit.getPlayer(u);
+			if (p != null) stopPossessing(p);
+		}
+		cleanupSessions();
+	}
 	
 	/** Cleanup invalid sessions */
 	public void cleanupSessions() {

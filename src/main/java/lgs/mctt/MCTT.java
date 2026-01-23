@@ -1,5 +1,9 @@
 package lgs.mctt;
 
+import com.comphenix.protocol.PacketType;
+import com.comphenix.protocol.ProtocolLibrary;
+import com.comphenix.protocol.ProtocolManager;
+import com.comphenix.protocol.events.PacketContainer;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -19,6 +23,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.potion.PotionEffectType;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -100,6 +105,13 @@ private void buildCommands() {
 				final EntitySelectorArgumentResolver selectedEntity = ctx.getArgument("target", EntitySelectorArgumentResolver.class);
 				final List<Entity> entities = selectedEntity.resolve(ctx.getSource());
 				possessHandler.handlePossess(player, entities.getFirst());
+				return 1;
+			})
+		).then(Commands.argument("clear", StringArgumentType.word())
+			.executes(ctx -> {
+				Player player = (Player) ctx.getSource().getSender();
+				possessHandler.stopAllPossessions();
+				player.sendActionBar(Component.text("All possessions cleared.").color(NamedTextColor.GREEN));
 				return 1;
 			})
 		);
@@ -337,7 +349,38 @@ public static boolean isPC(Player player)
 	return player.teamDisplayName().toString().contains("players");
 }
 
+public static void sendInvisTarget(Player viewer, LivingEntity target) {
+	ProtocolManager pm = ProtocolLibrary.getProtocolManager();
+	PacketContainer packet = pm.createPacket(PacketType.Play.Server.ENTITY_EFFECT);
+	// Entity ID
+	packet.getIntegers().write(0, target.getEntityId());
+	// Effect type (NOT an ID)
+	packet.getEffectTypes().write(0, PotionEffectType.INVISIBILITY);
+	// Amplifier (0 = level I)
+	packet.getBytes().write(0, (byte) 0);
+	// Duration (large = effectively infinite)
+	packet.getIntegers().write(1, 32767);
+	// Flags: ambient, particles, icon
+	packet.getBooleans().write(0, false);
+	packet.getBooleans().write(1, false);
+	packet.getBooleans().write(2, false);
 	
+	try { pm.sendServerPacket(viewer, packet);}
+	catch (Exception ignored) { }
+}
+
+public static void removeInvisTarget(Player viewer, LivingEntity target) {
+	ProtocolManager pm = ProtocolLibrary.getProtocolManager();
+	PacketContainer packet = pm.createPacket(PacketType.Play.Server.REMOVE_ENTITY_EFFECT);
 	
+	// Entity ID
+	packet.getIntegers().write(0, target.getEntityId());
+	// Effect type to remove
+	packet.getEffectTypes().write(0, PotionEffectType.INVISIBILITY);
+	
+	try { pm.sendServerPacket(viewer, packet);}
+	catch (Exception ignored) { }
+}
+
 }
 

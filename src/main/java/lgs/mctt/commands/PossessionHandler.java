@@ -10,6 +10,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
@@ -29,7 +30,7 @@ public class PossessionHandler {
 	public record PossessionSession(
 		Player player,
 		Entity target,
-		BukkitTask task,
+		BukkitTask updateTask,
 		long startedAt,
 		UUID sessionId
 	) { }
@@ -102,6 +103,21 @@ public class PossessionHandler {
 			}} catch (Exception ignored) {}
 			
 		}, 1L, 1L);
+		// Report Possessed Entity to Action bar 1/second.
+		new BukkitRunnable() {
+			int ticks = 0;
+
+			@Override
+			public void run() {
+				Bukkit.getServer().broadcastMessage("Tick: " + ticks);
+				ticks++;
+
+				if (ticks >= 10) {
+					this.cancel();
+				}
+			}
+		}.runTaskTimer(plugin, 0L, 20L);
+
 		
 		PossessionSession session = new PossessionSession(player, target, task, System.currentTimeMillis(), UUID.randomUUID());
 		activeSessionsData.put(player.getUniqueId(), session);
@@ -113,7 +129,7 @@ public class PossessionHandler {
 		PossessionSession session = activeSessionsData.remove(player.getUniqueId());
 		if (session == null) return;
 		
-		try { if (session.task() != null) session.task().cancel(); } catch (Exception ignored) {}
+		try { if (session.updateTask() != null) session.updateTask().cancel(); } catch (Exception ignored) {}
 		
 		MCTT.ShowEntityTo(session.target(), player);
 		MCTT.ShowEntityTo(session.player(), null);
@@ -141,7 +157,7 @@ public class PossessionHandler {
 	public void cleanupSessions() {
 		for (var e : activeSessionsData.entrySet()) {
 			PossessionSession s = e.getValue();
-			try { if (s.task() != null) s.task().cancel(); } catch (Exception ignored) {}
+			try { if (s.updateTask() != null) s.updateTask().cancel(); } catch (Exception ignored) {}
 			possessionMap.remove(s.player().getUniqueId());
 		}
 		activeSessionsData.clear();

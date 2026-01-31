@@ -5,6 +5,7 @@ lgs\mctt\commands\Heal_Command.class
 lgs\mctt\characters\Stat.class
 lgs\mctt\players\Event_Listener.class
 lgs\mctt\util\Clock.class
+lgs\mctt\commands\PossessionHandler$1.class
 lgs\mctt\commands\PossessionHandler.class
 lgs\mctt\commands\PossessionHandler$PossessionSession.class
 lgs\mctt\util\Raycaster.class

@@ -91,7 +91,7 @@ public class StartCombat_Command{
 		rollAll();
 	}
 
-	// Add entity to frozen set and start freeze task if needed
+	// Add entity to frozen set and start freeze updateTask if needed
 	private void pauseEntity(LivingEntity entity) {
 		combatEntities.add(entity);
 		entity.addScoreboardTag("PAUSED");
@@ -117,7 +117,7 @@ public class StartCombat_Command{
 			entity.removeScoreboardTag("COMBAT");
 		}
 		
-		// Cancel task if no entities remain
+		// Cancel updateTask if no entities remain
 		if (combatEntities.isEmpty() && combatTask != null) {
 			combatTask.cancel();
 			combatTask = null;
@@ -239,14 +239,11 @@ public String getInitiativeName(Entity entity) {
 		String name = base;
 		int i = 0;
 		
-		if (board != null) {
-			if (board.getEntries().contains(name))
-				while (board.getEntries().contains(name))
-					name = base + "_" + i++;
-		} else {
-			// No scoreboard available (unlikely) - append part of the UUID to ensure uniqueness
-			name = base + "_" + id.toString().substring(0, 4);
-		}
+		if (board == null) return base + "_" + id.toString().substring(0, 4);
+
+		if (!board.getScores(base).isEmpty())
+			while (!board.getScores(base).isEmpty())
+				name = base + " " + i++;
 		return name;
 	});
 }

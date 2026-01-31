@@ -9,10 +9,12 @@ import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.util.RayTraceResult;
 import lgs.mctt.util.Raycaster;
 
+import java.util.List;
 import java.util.UUID;
 
 public class Trace_Command{

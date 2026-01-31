@@ -106,7 +106,7 @@ public final class Raycaster {
 			FluidCollisionMode.NEVER,
 			true,
 			raySize,
-			(Entity e) -> !e.equals(player) && !(playerMarkers.containsValue(e))
+			(Entity e) -> !e.equals(player) && !(playerMarkers.containsValue(e) && !e.equals(MCTT.possessor(player)))
 		);
 	}
 }

@@ -130,7 +130,9 @@ public String getStatValue(String key)
 public void setStatValue(String key, String value)
 {
     Stat stat = stats.get(key);
-    if (stat != null) stat.setValue(value);
+    if (stat == null) return;
+    if (isSkill(key)) stat.setBonus(Integer.parseInt(value));
+    else stat.setValue(value);
 }
 
 /** Gets the modifier for any numeric stat */
@@ -140,6 +142,7 @@ public int getTotal(String key) {
     if (!isSkill(key)) return stat.getIntValue();
     int total = stat.getMod() + (int) calcProf(key) + stat.bonus;
     stat.value = ""+total; // May not properly set value. Should use .put() if needed.
+    stats.put(key,stat);
     return total;
 }
 
@@ -163,6 +166,19 @@ public boolean isAttribute(String key) {
     return false;
 }
 
+public void setProficiency(String key, float proficiency) {
+    Stat stat = stats.get(key);
+    if (stat == null) return;
+    stat.proficiency = proficiency;
+    stats.put(key,stat);
+}
+
+public void setAdvantage(String key, int advantage) {
+    Stat stat = stats.get(key);
+    if (stat == null) return;
+    stat.advantage = advantage;
+    stats.put(key,stat);
+}
 public int getAdvantage(String key) {
     Stat stat = stats.get(key);
     return (stat != null) ? stat.getAdvantage() : 0;

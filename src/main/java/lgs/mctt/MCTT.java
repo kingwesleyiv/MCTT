@@ -25,6 +25,7 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.util.RayTraceResult;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -91,16 +92,13 @@ private void buildCommands() {
 				possessHandler.stopPossessing(player);
 				return 1;}
 			// Otherwise, try to possess entity in sight
-			Entity target;
-			try {
-				target = player.rayTraceEntities(20).getHitEntity();
-				if (target == null) { target = player.getTargetEntity(20);
-					if (target == null) { player.sendActionBar(Component.text("No Entity.").color(NamedTextColor.BLACK));
-						return 1;
-					}
-				}
-				possessHandler.handlePossess(player, target);
-			} catch (Exception e) { player.sendActionBar(Component.text("Command Error.").color(NamedTextColor.DARK_RED));}
+			Entity target = player.getTargetEntity(20);
+			RayTraceResult traceResult = player.rayTraceEntities(20);
+			if (traceResult != null) target = traceResult.getHitEntity();
+			if (target == null) { player.sendActionBar(Component.text("No Entity.").color(NamedTextColor.BLACK));
+						return 0;
+			}
+			possessHandler.handlePossess(player, target);
 			return 1;
 		})
 		// Argument form: possess <entity>
@@ -233,6 +231,9 @@ private void buildCommands() {
 	
 	// Trace Command for finding distances.
 	LiteralArgumentBuilder<CommandSourceStack> traceCMD = Commands.literal("trace")
+		.executes( ctx -> {
+			return this.traceCMD.onCommand(ctx.getSource().getSender(), 1000);
+		})
 		.then(Commands.argument("range (ft.)", IntegerArgumentType.integer())
 			.executes( ctx -> {
 				return this.traceCMD.onCommand(ctx.getSource().getSender(), IntegerArgumentType.getInteger(ctx, "range (ft.)"));
@@ -263,25 +264,22 @@ private void buildCommands() {
 					final List<Player> targets = selector.resolve(ctx.getSource()).stream().filter(e ->
 						e instanceof Player).map(e -> (Player) e).toList();
 
-					for (Player target : targets) {
-						target.setFoodLevel(value);
-					}
+					for (Player target : targets) target.setFoodLevel(value);
 					return 1;
 				})
 			)
 		)
 		// /food absorb <value> <target...>
 		.then(Commands.literal("absorb")
-			.then(Commands.argument("value", FloatArgumentType.floatArg(0))
+			.then(Commands.argument("value", FloatArgumentType.floatArg(0, 20))
 				.then(Commands.argument("target", ArgumentTypes.players())
 					.executes(ctx -> {
 						int value = (int) FloatArgumentType.getFloat(ctx, "value");
 						final EntitySelectorArgumentResolver selector = ctx.getArgument("target", EntitySelectorArgumentResolver.class);
 						final List<Player> targets = selector.resolve(ctx.getSource()).stream().filter(e ->
 							e instanceof Player).map(e -> (Player) e).toList();
-						for (Player target : targets) {
-							target.setAbsorptionAmount(value);
-						}
+
+						for (Player target : targets) target.setAbsorptionAmount(value);
 						return 1;
 					})
 				)
@@ -347,17 +345,88 @@ private void buildCommands() {
 					return this.charCMD.deleteSheet(player, name);
 				})
 			)
-		).then(Commands.literal("edit")
-			.then(Commands.argument("character", StringArgumentType.string())
-				.then(Commands.argument("stat", StringArgumentType.string())
-					.then(Commands.argument("value", StringArgumentType.string())
+			.then(Commands.literal("edit")
+				.then(Commands.argument("character", StringArgumentType.string())
+					.then(Commands.argument("stat", StringArgumentType.string())
+						// default: set proficiency to 1 if no literal provided
 						.executes(ctx -> {
 							Player player = (Player) ctx.getSource().getSender();
 							String name = StringArgumentType.getString(ctx, "character");
 							String stat = StringArgumentType.getString(ctx, "stat");
-							String value = StringArgumentType.getString(ctx, "value");
-							return this.charCMD.edit(player, name, stat, value);
+
+							CharacterSheet sheet = this.charCMD.manager.getSheetByName(name);
+							if (sheet == null) {
+								player.sendMessage(Component.text("Character not found.").color(NamedTextColor.RED));
+								return 0;
+							}
+
+							sheet.setProficiency(stat, 1);
+							player.sendMessage(Component.text("Set " + stat + " proficiency to 1").color(NamedTextColor.GREEN));
+							return 1;
 						})
+						// "value" literal
+						.then(Commands.literal("value")
+							.then(Commands.argument("amount", IntegerArgumentType.integer())
+								.executes(ctx -> {
+									Player player = (Player) ctx.getSource().getSender();
+									String name = StringArgumentType.getString(ctx, "character");
+									String stat = StringArgumentType.getString(ctx, "stat");
+									int amount = IntegerArgumentType.getInteger(ctx, "amount");
+
+									CharacterSheet sheet = this.charCMD.manager.getSheetByName(name);
+									if (sheet == null) {
+										player.sendMessage(Component.text("Character not found.").color(NamedTextColor.RED));
+										return 0;
+									}
+
+									sheet.setStatValue(stat, ""+amount);
+									player.sendMessage(Component.text("Set " + stat + " to " + amount).color(NamedTextColor.GREEN));
+									return 1;
+								})
+							)
+						)
+						// "adv" literal
+						.then(Commands.literal("adv")
+							.then(Commands.argument("amount", IntegerArgumentType.integer())
+								.executes(ctx -> {
+									Player player = (Player) ctx.getSource().getSender();
+									String name = StringArgumentType.getString(ctx, "character");
+									String stat = StringArgumentType.getString(ctx, "stat");
+									int amount = IntegerArgumentType.getInteger(ctx, "amount");
+
+									CharacterSheet sheet = this.charCMD.manager.getSheetByName(name);
+									if (sheet == null) {
+										player.sendMessage(Component.text("Character not found.").color(NamedTextColor.RED));
+										return 0;
+									}
+
+									sheet.setAdvantage(stat, amount);
+									player.sendMessage(Component.text("Set " + stat + " advantage to " + amount).color(NamedTextColor.GREEN));
+									return 1;
+								})
+							)
+						)
+						// "prof" literal
+						.then(Commands.literal("prof")
+							.then(Commands.argument("amount", IntegerArgumentType.integer())
+								.executes(ctx -> {
+									Player player = (Player) ctx.getSource().getSender();
+									String name = StringArgumentType.getString(ctx, "character");
+									String stat = StringArgumentType.getString(ctx, "stat");
+									int amount = IntegerArgumentType.getInteger(ctx, "amount");
+
+									CharacterSheet sheet = this.charCMD.manager.getSheetByName(name);
+									if (sheet == null) {
+										player.sendMessage(Component.text("Character not found.").color(NamedTextColor.RED));
+										return 0;
+									}
+
+									sheet.setProficiency(stat, amount);
+									player.sendMessage(Component.text("Set " + stat + " proficiency to " + amount).color(NamedTextColor.GREEN));
+									return 1;
+								})
+							)
+						)
 					)
 				)
 			)
@@ -411,8 +480,54 @@ private void buildCommands() {
 				})
 			)
 		);
-		
-	
+
+	LiteralArgumentBuilder<CommandSourceStack> togglePossessViewCMD = Commands.literal("possessview")
+		.executes(ctx -> {
+			Player player = (Player) ctx.getSource().getSender();
+			Entity target = possessor(player); // get the possessed entity (or player itself if none)
+
+			if (target == null) {
+				player.sendActionBar(Component.text("No possessed entity.").color(NamedTextColor.RED));
+				return 0;
+			}
+			if (player.canSee(target)) {
+				// Already visible -> hide
+				HideEntityFrom(target, player);
+				player.sendActionBar(Component.text("Possessed entity hidden.").color(NamedTextColor.GRAY));
+			} else {
+				// Not visible -> show
+				ShowEntityTo(target, player);
+				player.sendActionBar(Component.text("Possessed entity shown.").color(NamedTextColor.GREEN));
+			}
+
+			return 1;
+		});
+
+	LiteralArgumentBuilder<CommandSourceStack> nickCMD = Commands.literal("nickname")
+		.then(Commands.argument("target", ArgumentTypes.players())
+			.then(Commands.argument("name", StringArgumentType.string())
+				.executes(ctx -> {
+					final EntitySelectorArgumentResolver selector = ctx.getArgument("target", EntitySelectorArgumentResolver.class);
+					final List<Player> targets = selector.resolve(ctx.getSource()).stream().filter(e ->
+						e instanceof Player).map(e -> (Player) e).toList();
+					String newName = StringArgumentType.getString(ctx, "name");
+					for (Player target : targets) {
+						// Set display name (chat messages)
+						target.displayName(Component.text(newName));
+						// Set tab list name
+						target.playerListName(Component.text(newName));
+					}
+
+					ctx.getSource().getSender().sendMessage(
+						Component.text("Nickname set to " + newName + " for " + targets.size() + " player(s).")
+					);
+					return 1;
+				})
+			)
+		);
+
+
+
 	this.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, commands ->
 	{
 		commands.registrar().register(foodCMD.build());
@@ -422,6 +537,8 @@ private void buildCommands() {
 		commands.registrar().register(charCMD.build());
 		commands.registrar().register(rollCommand.build());
 		commands.registrar().register(possessCMD.build());
+		commands.registrar().register(togglePossessViewCMD.build());
+		commands.registrar().register(nickCMD.build());
 	});
 }
 

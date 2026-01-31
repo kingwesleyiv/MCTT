@@ -4,7 +4,7 @@ public class Stat {
 
 public String value = "0";
 public String parent = "";
-public float proficiency; // 0 = none, -1 = half, 1 = full, 2 = expertise
+public float proficiency; // 0 = none, 0.5 = half, 1 = full, 2 = expertise
 public int advantage;   // -1 = disadvantage, 0 = normal, 1 = advantage
 public int bonus;       // flat bonus to add to rolls involving this stat
     

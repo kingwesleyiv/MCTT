@@ -1,12 +1,10 @@
 package lgs.mctt.commands;
 
-import lgs.mctt.MCTT;
 import lgs.mctt.characters.CharacterSheet;
 import lgs.mctt.characters.CharacterSheet_Manager;
 import lgs.mctt.characters.Stat;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
@@ -50,20 +48,18 @@ public class Roll_Command {
 		
 		UUID playerId = player.getUniqueId();
 		CharacterSheet sheet = manager.getAssignedSheet(playerId);
-		String normalizedName = "";
 		
 		if ( sheet == null) {
 			player.sendMessage(ChatColor.DARK_RED + "No sheet found.");
 			return 0;
 		}
 		else {
-			normalizedName = normalizeStatName(statName);
-			Stat stat = sheet.getStat(normalizedName);
+			Stat stat = sheet.getStat(statName);
 			if (stat == null) {
 				player.sendMessage(ChatColor.RED + "Stat '" + statName + "' not found on your sheet.");
 				return 0;
 			}
-			baseModifier = sheet.getModifier(normalizedName);
+			baseModifier = sheet.getTotal(statName);
 			profBonus += stat.getProficiency();
 			advState += stat.getAdvantage();
 		}
@@ -82,7 +78,7 @@ public class Roll_Command {
 			if (advState < 0) rolls.sort(Collections.reverseOrder());
 		}
 		
-		sendRollMessage(player, normalizedName, rolls, baseModifier, profBonus, advState);
+		sendRollMessage(player, statName, rolls, baseModifier, profBonus, advState);
 		return 1;
 	}
 	

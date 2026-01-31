@@ -3,9 +3,10 @@ version: '0.4.1'
 main: lgs.mctt.MCTT
 api-version: '1.21'
 load: STARTUP
+loader: org.example.MyPluginLoader
 authors: [ KingWesley ]
 description: A plugin designed to turn Minecraft into a TTRPG Tabletop.
-website: lootgoblinstudio.com
+website:
 
 commands:
   trace:
@@ -14,35 +15,44 @@ commands:
     aliases: [t]
     permission: MCTT.trace
     default: notop
-  startcombat:
+  combat:
     description: Freeze all entities within range
-    usage: /startcombat [range]
+    usage: /combat [range]
     aliases: [freeze, players, fr, pause]
-    permission: MCTT.startcombat
+    permission: MCTT.combat
     default: op
-  character:
+  char:
     description: Manage your DnD characters
-    usage: /character <create|delete|edit|view> [args]
-    aliases: [char, c]
-    permission: MCTT.character
+    usage: /char <create|delete|edit|view> [args]
+    aliases: [char, character]
+    permission: MCTT.char
     default: notop
   heal:
     description: Heal a player
-    usage: /restore [player]
+    usage: /heal [player]
     aliases: [fullheal]
     permission: MCTT.heal
     default: op
+  r:
+    description: Roll dice using standard notation
+    usage: /r <dice number> <dice sides> [modifier], or /r <skill>
+    aliases: [roll, dice]
+    permission: MCTT.roll
+    default: notop
 
 permissions:
     MCTT.trace:
       description: Allows use of the /trace command
-      default: notop
-    MCTT.startcombat:
-      description: Allows use of the /startcombat command
-      default: op
-    MCTT.character:
-      description: Allows use of the /character command
-      default: op
+      default: true
+    MCTT.combat:
+      description: Allows use of the /combat command
+      default: false
+    MCTT.char:
+      description: Allows use of the /char command
+      default: true
     MCTT.heal:
       description: Allows use of the /heal command
-      default: op
+      default: false
+    MCTT.r:
+      description: Allows use of the /r command
+      default: true

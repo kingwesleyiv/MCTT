@@ -1,7 +1,9 @@
 package lgs.mctt.players;
 
 import io.papermc.paper.event.entity.EntityMoveEvent;
+import lgs.mctt.MCTT;
 import lgs.mctt.characters.Conditions;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
@@ -26,7 +28,7 @@ public void onPlayerJump(PlayerMoveEvent event) {
 	if(Conditions.hasAnyTag(player.getScoreboardTags(), Conditions.ZERO_SPEED)) {
 		event.setCancelled(true);
 		return;
-	}
+	} else if (player.isFlying() || player.getGameMode() == GameMode.SPECTATOR) return;
 	
 	Vector velocity = player.getVelocity();
 	
@@ -72,10 +74,12 @@ public void onEntityMove(EntityMoveEvent event) {
 
 @EventHandler
 public void onPlayerInput(PlayerInputEvent event) {
+	Player player = event.getPlayer();
 	if((event.getInput().isSneak() && event.getInput().isSprint())
-		&& (event.getPlayer().getPose().equals(Pose.STANDING) || event.getPlayer().getPose().equals(Pose.SNEAKING))) {
-		event.getPlayer().performCommand("crawl");
+		&& (player.getPose().equals(Pose.STANDING) || player.getPose().equals(Pose.SNEAKING))) {
+		player.performCommand("crawl");
 	}
+	if (player.getGameMode().equals(GameMode.SPECTATOR) && MCTT.isDM(player)) { player.sendMessage(event.getInput().toString());}
 }
 
 @EventHandler

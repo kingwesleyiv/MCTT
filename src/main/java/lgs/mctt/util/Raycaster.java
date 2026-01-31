@@ -26,12 +26,12 @@ public final class Raycaster {
 		}
 		playerMarkers.clear();
 	}
-	
+
 	public RayTraceResult spawnParticleBeam(Player player, double maxDistance) {
 		if (maxDistance <= 0) {
 			clearMarkers();
 		}
-		
+
 		float spacing = 0.5f;
 		final double raySize = 0.1;
 		
@@ -59,12 +59,12 @@ public final class Raycaster {
 		Vector waistDir = end.clone().subtract(waist).toVector().normalize();
 		
 		// Particle Spawning
-		Particle.DustOptions dust = new Particle.DustOptions(Color.fromRGB(Trace_Command.getDistRGB(totalDistance)), 1f);
+		Particle.DustOptions dust = new Particle.DustOptions(hit?Color.fromRGB(Trace_Command.getDistRGB(totalDistance)):Color.GRAY, 1f);
 		for (double d = 0.0; d <= totalDistance / 3.28084; d += Math.max(0.01, spacing)) {
 			world.spawnParticle(Particle.DUST, waist.clone().add(waistDir.clone().multiply(d)), 1, 0, 0, 0, 0, dust);
 		}
 		
-		manageMarkerEntity(player, end.add(0,0.2f,0), (float)(totalDistance), dust.getColor().asRGB());
+		manageMarkerEntity(player, end.add(0,0.1f,0), (float)(totalDistance), dust.getColor().asRGB());
 		
 		return result;
 	}

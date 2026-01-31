@@ -1,6 +1,7 @@
 package lgs.mctt.commands;
 
 import lgs.mctt.MCTT;
+import lgs.mctt.characters.CharacterSheet;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -85,9 +86,9 @@ public class StartCombat_Command{
 			pauseEntity(living);
 		}
 		
-		player.sendMessage("§ePaused " + combatEntities.size() + " entities.");
+		player.sendMessage("§ePaused " + combatEntities.size() + " entities. Rolling initiative...");
 		initScoreboard();
-		rollInitiative((MCTT) plugin);
+		rollAll();
 	}
 
 	// Add entity to frozen set and start freeze task if needed
@@ -165,26 +166,15 @@ public class StartCombat_Command{
 		initiativeRolls.clear();
 	}
 	
-	private void rollInitiative(MCTT plugin) {
+	private void rollAll() {
 		if (initScoreObjective == null) return;
-		
-		List<Map.Entry<Player, Integer>> results = new ArrayList<>();
 		
 		for (Entity e : combatEntities) {
 			if (!(e instanceof Player player)) continue;
 			if (!MCTT.isPC(player)) continue;
 			
-			int roll = MCTT.rollCMD.rollStat(player, "Initiative", 0, 0);
+			int roll = rollInitiative(player, 0);
 			initiativeRolls.put(player.getUniqueId(), roll);
-			results.add(Map.entry(player, roll));
-		}
-		
-		results.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
-		
-		for (Map.Entry<Player, Integer> entry : results) {
-			initScoreObjective
-				.getScore(entry.getKey().getName())
-				.setScore(entry.getValue());
 		}
 	}
 	
@@ -195,44 +185,67 @@ public class StartCombat_Command{
 		}
 		initiativeRolls.clear();
 	}
+
+	public void removeInitiativeByName(String name) {
+		initScoreObjective.getScore(name).resetScore();
+	}
+	public void removeInitiative(Entity entity) {
+		initScoreObjective.getScoreFor(entity).resetScore();
+	}
 	
-	public void forceInitiative(Entity entity, int modifier) {
-		if (initScoreObjective == null) return;
-		
-		int roll;
-		
-		if (entity instanceof Player player && MCTT.isPC(player)) {
-			roll = MCTT.rollCMD.rollStat(player, "Initiative", 0, 0);
+	public int rollInitiative(Entity target, int modifier) {
+		if (initScoreObjective == null) return 0;
+
+		int roll = ThreadLocalRandom.current().nextInt(1, 21) + modifier;
+		String name = getInitiativeName(target);
+
+		CharacterSheet character = MCTT.charMGR().getSheetByUUID(target.getUniqueId());
+		if (character != null) {
+			name = character.getName();
+			int bonus = character.getTotal("Initiative");
+			int advantage = character.getAdvantage("Initiative");
+			if (advantage != 0) {
+				int[] advRolls = new int[Math.abs(advantage)+1];
+				advRolls[0] = roll + bonus;
+				for (int i = Math.abs(advantage); i > 0; i--) {
+					advRolls[i] = ThreadLocalRandom.current().nextInt(1, 21) + bonus + modifier;
+				}
+				if (advantage > 0) {
+					Bukkit.getServer().sendMessage(Component.text(
+						name + " rolled initiative (With Advantage): " + advRolls.toString()).color(NamedTextColor.YELLOW));
+					roll = Arrays.stream(advRolls).max().getAsInt();
+				} else {
+					Bukkit.getServer().sendMessage(Component.text(
+						name + " rolled initiative (With Disadvantage): " + advRolls.toString()).color(NamedTextColor.DARK_RED));
+					roll = Arrays.stream(advRolls).min().getAsInt();
+				}
+			}
 		} else {
-			roll = ThreadLocalRandom.current().nextInt(1, 21);
+			Bukkit.getServer().sendMessage(Component.text(
+				name + " rolled initiative: " + roll).color(NamedTextColor.WHITE));
 		}
-		
-		roll += modifier;
-		
-		String entryName = entity.getName();
-		
-		initScoreObjective.getScore(entryName).setScore(roll);
+		initScoreObjective.getScore(name).setScore(roll);
+		return roll;
 	}
 
 public String getInitiativeName(Entity entity) {
 	return initiativeNames.computeIfAbsent(entity.getUniqueId(), id -> {
-		String base = entity instanceof Player p
-			              ? p.getName() : entity.getType().name();
+		String base = entity instanceof Player p ? p.getName() :
+			entity.customName() == null || entity.customName().examinableName().equals("") ?
+				entity.getType().name() : entity.customName().examinableName();
 		
-		// Try to use the main scoreboard to ensure uniqueness; fall back to UUID short if unavailable
-		ScoreboardManager mgr = Bukkit.getScoreboardManager();
-		Scoreboard board = mgr != null ? mgr.getMainScoreboard() : null;
+		Scoreboard board = Bukkit.getScoreboardManager().getMainScoreboard();
 		
 		String name = base;
 		int i = 0;
 		
 		if (board != null) {
-			while (board.getEntries().contains(name)) {
-				name = base + i++;
-			}
+			if (board.getEntries().contains(name))
+				while (board.getEntries().contains(name))
+					name = base + "_" + i++;
 		} else {
 			// No scoreboard available (unlikely) - append part of the UUID to ensure uniqueness
-			name = base + "-" + id.toString().substring(0, 8);
+			name = base + "_" + id.toString().substring(0, 4);
 		}
 		return name;
 	});

@@ -1,5 +1,6 @@
 package lgs.mctt.commands;
 
+import lgs.mctt.MCTT;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -43,7 +44,7 @@ public class Trace_Command{
 					.append(Component.text(" ft.)").color(NamedTextColor.GRAY))
 			);
 		} else {
-			if (ray.getHitEntity() != null) {
+			if (ray.getHitEntity() != null && MCTT.isDM(player)) {
 				UUID hitId = ray.getHitEntity().getUniqueId();
 				player.sendMessage(Component.text("Name: ").append(Component.text(ray.getHitEntity().getName())).color(distColor));
 				player.sendMessage(Component.text("Click Here to copy UUID. ").color(NamedTextColor.AQUA)
@@ -76,7 +77,7 @@ public static int getDistRGB(double distanceFeet) {
 		case 5 -> color = Color.fromRGB(255, 128, 0).asRGB();
 		case 6 -> color = Color.fromRGB(255, 0, 0).asRGB();
 		case 7 -> color = Color.fromRGB(128, 0, 255).asRGB();
-		default -> color = Color.fromRGB(128, 128, 128).asRGB();
+		default -> color = Color.fromRGB(255, 255, 255).asRGB();
 	}
 	return color;
 }

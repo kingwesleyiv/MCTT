@@ -15,8 +15,8 @@ public class CharacterSheet_Manager {
     private final YamlConfiguration config;
     
     // In-memory caches
-    private final Map<String, CharacterSheet> sheets = new HashMap<>();
-    private final Map<UUID, String> assignments = new HashMap<>();
+    public final Map<String, CharacterSheet> sheets = new HashMap<>();
+    public final Map<UUID, String> assignedSheets = new HashMap<>();
     
     public CharacterSheet_Manager(MCTT plugin) {
         this.sheetsFile = new File(plugin.getDataFolder(), "sheets.yml");
@@ -37,30 +37,30 @@ public class CharacterSheet_Manager {
 // Sheet CRUD
 // -------------------------
     
-    public boolean create(String name, float level) {
-        if (sheets.containsKey(name.toLowerCase())) return false;
+    public boolean create(String name, int level, String dndclass) {
+        if (sheets.containsKey(name)) return false;
         
-        CharacterSheet sheet = new CharacterSheet(name, level);
-        sheets.put(name.toLowerCase(), sheet);
+        CharacterSheet sheet = new CharacterSheet(name, level, dndclass);
+        sheets.put(name, sheet);
         return save(sheet);
     }
     
     public boolean delete(String name) {
-        String key = name.toLowerCase();
+        String key = name;
         if (!sheets.containsKey(key)) return false;
         sheets.remove(key); // Remove the sheet from memory
         config.set("sheets." + key, null); // Remove from config
-        assignments.entrySet().removeIf(e -> e.getValue().equalsIgnoreCase(name)); // Remove any assignments pointing to this sheet
-        config.set("assignments", assignments); // Save updated assignments back to YAML
+        assignedSheets.entrySet().removeIf(e -> e.getValue().equals(name)); // Remove any assignedSheets pointing to this sheet
+        config.set("assignedSheets", assignedSheets); // Save updated assignedSheets back to YAML
         return saveFile();
     }
     
     public CharacterSheet load(String name) {
-        return sheets.get(name.toLowerCase());
+        return sheets.get(name);
     }
     
     public boolean save(CharacterSheet sheet) {
-        String key = sheet.getName().toLowerCase();
+        String key = sheet.getName();
         sheets.put(key, sheet);
         
         String base = "sheets." + key;
@@ -78,22 +78,26 @@ public class CharacterSheet_Manager {
     // Assignments
     // -------------------------
     
-    public boolean assignSheet(UUID targetUUID, String sheetName) {
-        if (!sheets.containsKey(sheetName.toLowerCase())) return false;
-        assignments.put(targetUUID, sheetName);
-        config.set("assignments." + targetUUID.toString(), sheetName);
-        return saveFile();
+    public int assignSheet(UUID targetUUID, String sheetName) {
+        if (!sheets.containsKey(sheetName)) return 0;
+        if (assignedSheets.containsKey(targetUUID) && assignedSheets.get(targetUUID).equals(sheetName))
+            return 1; // Already assigned to this sheet
+        else {
+            assignedSheets.put(targetUUID, sheetName);
+            config.set("assignedSheets." + targetUUID.toString(), sheetName);
+        }
+        return saveFile() ? 1 : 0;
     }
     
-    public boolean unassignSheet(UUID targetUUID) {
-        if (!assignments.containsKey(targetUUID)) return false;
-        assignments.remove(targetUUID);
-        config.set("assignments." + targetUUID.toString(), null);
-        return saveFile();
+    public int unassignSheet(UUID targetUUID) {
+        if (!assignedSheets.containsKey(targetUUID)) return 0;
+        assignedSheets.remove(targetUUID);
+        config.set("assignedSheets." + targetUUID.toString(), null);
+        return saveFile() ? 1 : 0;
     }
     
     public CharacterSheet getAssignedSheet(UUID targetUUID) {
-        String sheetName = assignments.get(targetUUID);
+        String sheetName = assignedSheets.get(targetUUID);
         if (sheetName == null) return null;
         return load(sheetName);
     }
@@ -106,8 +110,9 @@ public class CharacterSheet_Manager {
         if (!config.contains("sheets")) return;
         
         for (String key : config.getConfigurationSection("sheets").getKeys(false)) {
-            float level = (float) config.getDouble("sheets." + key + ".level", 1f);
-            CharacterSheet sheet = new CharacterSheet(key, level);
+            int level = config.getInt("sheets." + key + ".level");
+            String dndclass = config.getString("sheets." + key + ".class");
+            CharacterSheet sheet = new CharacterSheet(key, level, dndclass);
             
             if (config.contains("sheets." + key + ".stats")) {
                 for (String statKey : config.getConfigurationSection("sheets." + key + ".stats").getKeys(false)) {
@@ -116,19 +121,19 @@ public class CharacterSheet_Manager {
                 }
             }
             
-            sheets.put(key.toLowerCase(), sheet);
+            sheets.put(key, sheet);
         }
     }
     
     private void loadAllAssignments() {
-        if (!config.contains("assignments")) return;
+        if (!config.contains("assignedSheets")) return;
         
-        for (String uuidStr : config.getConfigurationSection("assignments").getKeys(false)) {
+        for (String uuidStr : config.getConfigurationSection("assignedSheets").getKeys(false)) {
             try {
                 UUID id = UUID.fromString(uuidStr);
-                String sheetName = config.getString("assignments." + uuidStr);
-                if (sheetName != null && sheets.containsKey(sheetName.toLowerCase())) {
-                    assignments.put(id, sheetName);
+                String sheetName = config.getString("assignedSheets." + uuidStr);
+                if (sheetName != null && sheets.containsKey(sheetName)) {
+                    assignedSheets.put(id, sheetName);
                 }
             } catch (IllegalArgumentException ignored) {
             }
@@ -144,16 +149,56 @@ public class CharacterSheet_Manager {
             return false;
         }
     }
-    
-    // -------------------------
-    // Helpers
-    // -------------------------
+
+    public boolean saveSheets() {
+        config.set("sheets", null);
+        for (CharacterSheet sheet : sheets.values()) {
+            String key = sheet.getName();
+            String base = "sheets." + key;
+            config.set(base + ".level", sheet.getLevel());
+            config.set(base + ".class", sheet.getDndClass());
+            for (Map.Entry<String, Stat> entry : sheet.getAllStats().entrySet()) {
+                config.set(base + ".stats." + entry.getKey(), entry.getValue().getValue());
+            }
+        }
+        config.set("assignedSheets", null);
+        for (Map.Entry<UUID, String> entry : assignedSheets.entrySet()) {
+            config.set("assignedSheets." + entry.getKey().toString(), entry.getValue());
+        }
+        return saveFile();
+    }
+
+    public void reloadSheets() {
+        sheets.clear();
+        assignedSheets.clear();
+        config.options().copyDefaults(false);
+        YamlConfiguration fresh = YamlConfiguration.loadConfiguration(sheetsFile);
+        config.set("sheets", fresh.getConfigurationSection("sheets"));
+        config.set("assignedSheets", fresh.getConfigurationSection("assignedSheets"));
+        loadAllSheets();
+        loadAllAssignments();
+    }
+
+    public static void reloadSheet(String name) {
+
+    }
     
     public Map<String, CharacterSheet> getAllSheets() {
         return sheets;
     }
     
     public Map<UUID, String> getAllAssignments() {
-        return assignments;
+        return assignedSheets;
     }
+
+    public CharacterSheet getSheetByUUID(UUID uuid) {
+        String sheetName = assignedSheets.get(uuid);
+        if (sheetName == null) return null;
+        return sheets.get(sheetName);
+    }
+
+    public CharacterSheet getSheetByName(String name) {
+        return sheets.get(name);
+    }
+
 }

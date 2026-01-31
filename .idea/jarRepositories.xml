@@ -7,6 +7,16 @@
       <option name="url" value="https://repo.maven.apache.org/maven2" />
     </remote-repository>
     <remote-repository>
+      <option name="id" value="xenondevs" />
+      <option name="name" value="xenondevs" />
+      <option name="url" value="https://repo.xenondevs.xyz/releases/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="xenondevs" />
+      <option name="name" value="xenondevs" />
+      <option name="url" value="https://repo.xenondevs.xyz/releases/xyz/xenondevs/invui/" />
+    </remote-repository>
+    <remote-repository>
       <option name="id" value="dmulloy2-repo" />
       <option name="name" value="dmulloy2-repo" />
       <option name="url" value="https://repo.dmulloy2.net/repository/public/" />
@@ -15,6 +25,11 @@
       <option name="id" value="papermc-repo" />
       <option name="name" value="papermc-repo" />
       <option name="url" value="https://repo.papermc.io/repository/maven-public/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="invui" />
+      <option name="name" value="invui" />
+      <option name="url" value="https://repo.xenondevs.xyz/releases" />
     </remote-repository>
     <remote-repository>
       <option name="id" value="central" />

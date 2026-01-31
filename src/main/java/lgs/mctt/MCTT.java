@@ -13,6 +13,7 @@ import io.papermc.paper.command.brigadier.Commands;
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
 import io.papermc.paper.command.brigadier.argument.resolvers.selector.EntitySelectorArgumentResolver;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
+import lgs.mctt.characters.CharacterSheet;
 import lgs.mctt.characters.CharacterSheet_Manager;
 import lgs.mctt.commands.*;
 import lgs.mctt.players.Event_Listener;
@@ -31,7 +32,7 @@ import java.util.List;
 public final class MCTT extends JavaPlugin {
 	
 	private static MCTT pluginInstance;
-	private static CharacterSheet_Manager charMGR;
+	public static CharacterSheet_Manager charMGR;
 	
 	private StartCombat_Command combatCMD;
 	private Trace_Command traceCMD;
@@ -57,9 +58,10 @@ public final class MCTT extends JavaPlugin {
 		traceCMD = new Trace_Command();
 		charCMD = new CharacterSheet_Command(charMGR);
 		possessHandler = new PossessionHandler(this);
-		
+
 		buildCommands();
-		
+
+		// Hacky Emitter setup.
 		getServer().getPluginManager().registerEvents(new Event_Listener(), this);
 		new Emitter_Task().runTaskTimer(this, 1000L, 2L);
 		
@@ -79,6 +81,7 @@ public static MCTT get() {return pluginInstance;}
 // Command Building // ***********************************************************************************************
 
 private void buildCommands() {
+	
 	LiteralArgumentBuilder<CommandSourceStack> possessCMD = Commands.literal("possess")
 		// No arguments: toggle possession of entity player is looking at
 		.executes(ctx -> {
@@ -90,12 +93,14 @@ private void buildCommands() {
 			// Otherwise, try to possess entity in sight
 			Entity target;
 			try {
-				target = player.rayTraceEntities(10).getHitEntity();
-				if (target != null) possessHandler.handlePossess(player, target);
-				else player.sendActionBar(Component.text("No Entity.").color(NamedTextColor.BLACK));
-			} catch (Exception e) {
-				player.sendActionBar(Component.text("Command Error.").color(NamedTextColor.DARK_RED));
-			}
+				target = player.rayTraceEntities(20).getHitEntity();
+				if (target == null) { target = player.getTargetEntity(20);
+					if (target == null) { player.sendActionBar(Component.text("No Entity.").color(NamedTextColor.BLACK));
+						return 1;
+					}
+				}
+				possessHandler.handlePossess(player, target);
+			} catch (Exception e) { player.sendActionBar(Component.text("Command Error.").color(NamedTextColor.DARK_RED));}
 			return 1;
 		})
 		// Argument form: possess <entity>
@@ -107,7 +112,7 @@ private void buildCommands() {
 				possessHandler.handlePossess(player, entities.getFirst());
 				return 1;
 			})
-		).then(Commands.argument("clear", StringArgumentType.word())
+		).then(Commands.literal("clear")
 			.executes(ctx -> {
 				Player player = (Player) ctx.getSource().getSender();
 				possessHandler.stopAllPossessions();
@@ -165,27 +170,50 @@ private void buildCommands() {
 	LiteralArgumentBuilder<CommandSourceStack> combatCMD = Commands.literal("combat")
 		.executes(ctx -> { return this.combatCMD.onCommand(ctx.getSource().getSender(), null); })
 		.then(Commands.literal("initiative")
-			.then(Commands.argument("entity", ArgumentTypes.entities())
+			.executes(ctx -> {
+				Entity target = possessor((Player)ctx.getSource().getSender());
+				this.combatCMD.rollInitiative(target, getInitiative(target));
+				return 1;
+			})
+			.then(Commands.argument("entities", ArgumentTypes.entities())
 				.executes(ctx -> {
-					final EntitySelectorArgumentResolver selector =
-						ctx.getArgument("entity", EntitySelectorArgumentResolver.class);
+					final EntitySelectorArgumentResolver selector = ctx.getArgument("entities", EntitySelectorArgumentResolver.class);
 					final List<Entity> entities = selector.resolve(ctx.getSource());
-					
-					for (Entity e : entities) {
-						this.combatCMD.forceInitiative(e, 0);
-					}
+					for (Entity e : entities)
+						this.combatCMD.rollInitiative(e, getInitiative(e));
 					return 1;
 				})
 				.then(Commands.argument("modifier", IntegerArgumentType.integer())
 					.executes(ctx -> {
-						final EntitySelectorArgumentResolver selector =
-							ctx.getArgument("entity", EntitySelectorArgumentResolver.class);
+						final EntitySelectorArgumentResolver selector = ctx.getArgument("entities", EntitySelectorArgumentResolver.class);
 						final List<Entity> entities = selector.resolve(ctx.getSource());
 						int mod = IntegerArgumentType.getInteger(ctx, "modifier");
 						
 						for (Entity e : entities) {
-							this.combatCMD.forceInitiative(e, mod);
+							this.combatCMD.rollInitiative(e, mod);
 						}
+						return 1;
+					})
+				)
+			)
+			.then(Commands.literal("remove")
+				.executes(ctx -> {
+					Entity target = possessor((Player)ctx.getSource().getSender());
+					this.combatCMD.removeInitiative(target);
+					return 1;
+				})
+				.then(Commands.argument("entities", ArgumentTypes.entities())
+					.executes(ctx -> {
+						final EntitySelectorArgumentResolver selector = ctx.getArgument("entities", EntitySelectorArgumentResolver.class);
+						final List<Entity> entities = selector.resolve(ctx.getSource());
+						for (Entity e : entities)
+							this.combatCMD.removeInitiative(e);
+						return 1;
+					})
+				)
+				.then(Commands.argument("name", StringArgumentType.string())
+					.executes(ctx -> {
+							this.combatCMD.removeInitiativeByName(StringArgumentType.getString(ctx, "name"));
 						return 1;
 					})
 				)
@@ -224,43 +252,94 @@ private void buildCommands() {
 				return Heal_Command.full_heal(ctx.getSource().getSender(), livingEntities);
 			})
 		);
-	
-		
-	// Character Command for managing stats.
-	LiteralArgumentBuilder<CommandSourceStack> charCMD = Commands.literal("char")
-		.then(Commands.literal("create")
-			.then(Commands.argument("name", StringArgumentType.word())
+
+	LiteralArgumentBuilder<CommandSourceStack> foodCMD = Commands.literal("food")
+		// /food <int>
+		.then(Commands.argument("value", FloatArgumentType.floatArg(0, 20))
+			.executes(ctx -> {
+				Player player = (Player) ctx.getSource().getSender();
+				int value = (int) FloatArgumentType.getFloat(ctx, "value");
+				player.setFoodLevel(value);
+				return 1;
+			})
+		)
+		// /food absorb <int>
+		.then(Commands.literal("absorb")
+			.then(Commands.argument("value", FloatArgumentType.floatArg(0))
 				.executes(ctx -> {
 					Player player = (Player) ctx.getSource().getSender();
-					String name = StringArgumentType.getString(ctx, "name");
-					return this.charCMD.createSheet(player, name, null);
+					int value = (int) FloatArgumentType.getFloat(ctx, "value");
+					player.setAbsorptionAmount(value);
+					return 1;
 				})
-				.then(Commands.argument("level", FloatArgumentType.floatArg())
-					.executes(ctx -> {
-						Player player = (Player) ctx.getSource().getSender();
-						String name = StringArgumentType.getString(ctx, "name");
-						float level = FloatArgumentType.getFloat(ctx, "level");
-						return this.charCMD.createSheet(player, name, level);
-					})
-				)
+			)
+		);
+
+
+
+	// Character Command for managing stats.
+	LiteralArgumentBuilder<CommandSourceStack> charCMD = Commands.literal("char")
+		.then(Commands.literal("save").executes(ctx -> { charMGR.saveSheets(); return 1; }))
+		.then(Commands.literal("reload").executes(ctx -> { charMGR.reloadSheets(); return 1; })
+			.then(Commands.argument("sheet", StringArgumentType.string())
+				.executes(ctx -> { charMGR.getSheetByName(StringArgumentType.getString(ctx, "sheet")).reload(); return 1;})
 			)
 		)
-		.then(Commands.literal("delete")
-			.then(Commands.argument("name", StringArgumentType.word())
+		.then(Commands.literal("create")
+			.then(Commands.argument("name", StringArgumentType.string())
+				.executes(ctx -> {
+					Entity target = possessor((Player)ctx.getSource().getSender());
+					String name = StringArgumentType.getString(ctx, "name");
+					return this.charCMD.createSheet(target, name, 1, "NPC");
+				})
+				.then(Commands.argument("level", IntegerArgumentType.integer())
+					.executes(ctx -> {
+						Entity target = possessor((Player)ctx.getSource().getSender());
+						String name = StringArgumentType.getString(ctx, "name");
+						int level = IntegerArgumentType.getInteger(ctx, "level");
+						return this.charCMD.createSheet(target, name, level, "NPC");
+					})
+					.then(Commands.argument("class", StringArgumentType.string())
+						.executes(ctx -> {
+							Entity target = possessor((Player)ctx.getSource().getSender());
+							String name = StringArgumentType.getString(ctx, "name");
+							int level = IntegerArgumentType.getInteger(ctx, "level");
+							String charClass = StringArgumentType.getString(ctx, "class");
+							return this.charCMD.createSheet(target, name, level, charClass);
+						})
+						.then(Commands.argument("target", ArgumentTypes.entities())
+							.executes(ctx -> {
+								EntitySelectorArgumentResolver selector = ctx.getArgument("entity", EntitySelectorArgumentResolver.class);
+								final Entity target = selector.resolve(ctx.getSource()).getFirst();
+								if (target == null) {
+									ctx.getSource().getSender().sendMessage("§cInvalid target.");
+									return 0;
+								}
+
+								String name = StringArgumentType.getString(ctx, "name");
+								int level = IntegerArgumentType.getInteger(ctx, "level");
+								String charClass = StringArgumentType.getString(ctx, "class");
+								return this.charCMD.createSheet(target, name, level, charClass);
+							})
+						)
+					)
+				)
+			)
+		).then(Commands.literal("delete")
+			.then(Commands.argument("name", StringArgumentType.string())
 				.executes(ctx -> {
 					Player player = (Player) ctx.getSource().getSender();
 					String name = StringArgumentType.getString(ctx, "name");
 					return this.charCMD.deleteSheet(player, name);
 				})
 			)
-		)
-		.then(Commands.literal("edit")
-			.then(Commands.argument("name", StringArgumentType.word())
-				.then(Commands.argument("stat", StringArgumentType.word())
-					.then(Commands.argument("value", StringArgumentType.word()) // or FloatArgumentType.floatArg() if numeric
+		).then(Commands.literal("edit")
+			.then(Commands.argument("character", StringArgumentType.string())
+				.then(Commands.argument("stat", StringArgumentType.string())
+					.then(Commands.argument("value", StringArgumentType.string())
 						.executes(ctx -> {
 							Player player = (Player) ctx.getSource().getSender();
-							String name = StringArgumentType.getString(ctx, "name");
+							String name = StringArgumentType.getString(ctx, "character");
 							String stat = StringArgumentType.getString(ctx, "stat");
 							String value = StringArgumentType.getString(ctx, "value");
 							return this.charCMD.edit(player, name, stat, value);
@@ -268,15 +347,14 @@ private void buildCommands() {
 					)
 				)
 			)
-		)
-		.then(Commands.literal("view")
-			.then(Commands.argument("name", StringArgumentType.word())
+		).then(Commands.literal("view")
+			.then(Commands.argument("name", StringArgumentType.string())
 				.executes(ctx -> {
 					Player player = (Player) ctx.getSource().getSender();
 					String name = StringArgumentType.getString(ctx, "name");
 					return this.charCMD.viewSheet(player, name, null);
 				})
-				.then(Commands.argument("stat", StringArgumentType.word())
+				.then(Commands.argument("stat", StringArgumentType.string())
 					.executes(ctx -> {
 						Player player = (Player) ctx.getSource().getSender();
 						String name = StringArgumentType.getString(ctx, "name");
@@ -285,15 +363,51 @@ private void buildCommands() {
 					})
 				)
 			)
+		).then(Commands.literal("assign")
+			.then(Commands.argument("target", ArgumentTypes.entity())
+				.then(Commands.argument("sheet", StringArgumentType.string())
+					.executes(ctx -> {
+						final EntitySelectorArgumentResolver selector =
+							ctx.getArgument("target", EntitySelectorArgumentResolver.class);
+						final Entity entity = selector.resolve(ctx.getSource()).getFirst();
+						if (entity == null) {
+							ctx.getSource().getSender().sendMessage("§cInvalid target.");
+							return 0;
+						}
+						String sheetName = StringArgumentType.getString(ctx, "sheet");
+						if (entity instanceof Player p)
+							return this.charCMD.assignSheet(ctx.getSource().getSender(), possessor(p), sheetName);
+						return this.charCMD.assignSheet(ctx.getSource().getSender(), entity, sheetName);
+					})
+				)
+			)
+		).then(Commands.literal("remove")
+			.then(Commands.argument("target", ArgumentTypes.entity())
+				.executes(ctx -> {
+					final EntitySelectorArgumentResolver selector =
+						ctx.getArgument("target", EntitySelectorArgumentResolver.class);
+					final Entity entity = selector.resolve(ctx.getSource()).getFirst();
+					if (entity == null) {
+						ctx.getSource().getSender().sendMessage("§cInvalid target.");
+						return 0;
+					}
+					if (entity instanceof Player p)
+						return this.charCMD.manager.unassignSheet(possessor(p).getUniqueId());
+					return this.charCMD.manager.unassignSheet(entity.getUniqueId());
+				})
+			)
 		);
+		
 	
- 	this.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, commands -> {
+	this.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, commands ->
+	{
+		commands.registrar().register(foodCMD.build());
 		commands.registrar().register(combatCMD.build());
 		commands.registrar().register(healCMD.build());
-	 	commands.registrar().register(traceCMD.build());
-	 	commands.registrar().register(charCMD.build());
-	    commands.registrar().register(rollCommand.build());
-	    commands.registrar().register(possessCMD.build());
+		commands.registrar().register(traceCMD.build());
+		commands.registrar().register(charCMD.build());
+		commands.registrar().register(rollCommand.build());
+		commands.registrar().register(possessCMD.build());
 	});
 }
 
@@ -349,7 +463,8 @@ public static boolean isPC(Player player)
 	return player.teamDisplayName().toString().contains("players");
 }
 
-public static void sendInvisTarget(Player viewer, LivingEntity target) {
+public static void sendInvisTarget(Player viewer, LivingEntity target)
+{
 	ProtocolManager pm = ProtocolLibrary.getProtocolManager();
 	PacketContainer packet = pm.createPacket(PacketType.Play.Server.ENTITY_EFFECT);
 	// Entity ID
@@ -369,7 +484,8 @@ public static void sendInvisTarget(Player viewer, LivingEntity target) {
 	catch (Exception ignored) { }
 }
 
-public static void removeInvisTarget(Player viewer, LivingEntity target) {
+public static void removeInvisTarget(Player viewer, LivingEntity target)
+{
 	ProtocolManager pm = ProtocolLibrary.getProtocolManager();
 	PacketContainer packet = pm.createPacket(PacketType.Play.Server.REMOVE_ENTITY_EFFECT);
 	
@@ -381,6 +497,22 @@ public static void removeInvisTarget(Player viewer, LivingEntity target) {
 	try { pm.sendServerPacket(viewer, packet);}
 	catch (Exception ignored) { }
 }
+
+// Returns the UUID of the player or the entity they are possessing.
+public static Entity possessor(Player player)
+{
+	if (MCTT.get().possessHandler.isPossessing(player))
+		return MCTT.get().possessHandler.activeSessionsData.get(player.getUniqueId()).target();
+	return player;
+}
+
+public static int getInitiative(Entity entity)
+{
+	CharacterSheet sheet = charMGR.getSheetByUUID(entity.getUniqueId());
+	if (sheet == null) return 0;
+	return sheet.getTotal("Initiative");
+}
+
 
 }
 

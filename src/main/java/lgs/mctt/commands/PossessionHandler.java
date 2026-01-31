@@ -5,14 +5,12 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.World;
 import org.bukkit.entity.*;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitTask;
-import org.bukkit.scoreboard.Team;
 
 import java.util.*;
 
@@ -23,13 +21,12 @@ public class PossessionHandler {
 	
 	private final Plugin plugin;
 	
-	/** player UUID -> active possession session */
-	public final Map<UUID, PossessionSession> activeSessions = new HashMap<>();
+// player UUID, Possession map.
+	public final Map<UUID, PossessionSession> activeSessionsData = new HashMap<>();
+// Player UUID, Target UUID map.
+	public final Map<UUID, UUID> possessionMap = new HashMap<>();
 	
-	/** target UUID -> possessor player UUID */
-	private final Map<UUID, UUID> targetToPlayer = new HashMap<>();
-	
-	private record PossessionSession(
+	public record PossessionSession(
 		Player player,
 		Entity target,
 		BukkitTask task,
@@ -42,7 +39,7 @@ public class PossessionHandler {
 	}
 	
 	public boolean isPossessing(Player player) {
-		return activeSessions.containsKey(player.getUniqueId());
+		return activeSessionsData.containsKey(player.getUniqueId());
 	}
 	
 	/** Start or stop possession */
@@ -51,16 +48,12 @@ public class PossessionHandler {
 		if (target == null || !target.isValid()) { player.sendMessage("§7Invalid target."); return; }
 		if (target instanceof Player && !MCTT.isDM(player)) { player.sendMessage("§cOnly a DM can possess other players."); return; }
 		
-		UUID targetId = target.getUniqueId();
-		if (targetToPlayer.containsKey(targetId)) {
-			player.sendMessage("§cEntity already possessed!"); return;
+		if (possessionMap.containsValue(target.getUniqueId())) {
+			player.sendMessage("§cEntity already possessed!");
+			return;
 		}
 		
-		// Clone entity
-		//Entity cloneEntity = cloneEntity(target);
-		//if (cloneEntity == null) { player.sendMessage("§cFailed to clone entity."); return; }
-		
-		// Hide real target from possessor.
+		// Hide target from possessor.
 		if (target instanceof Player) {
 			MCTT.sendInvisTarget(player, (LivingEntity)target);
 		} else MCTT.HideEntityFrom(target, player);
@@ -76,7 +69,7 @@ public class PossessionHandler {
 		player.teleport(target.getLocation());
 		player.sendActionBar(Component.text("You are now possessing " + target.getName() + ".").color(NamedTextColor.LIGHT_PURPLE));
 		
-		// Task: sync target + clone to player + copy items
+		// Task: sync target + copy items
 		BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
 			if (!player.isOnline() || !target.isValid()) { stopPossessing(player); return; }
 			
@@ -86,25 +79,38 @@ public class PossessionHandler {
 			try { target.teleport(loc); target.setVelocity(new org.bukkit.util.Vector(0,0,0)); } catch (Exception ignored) {}
 			
 			// Copy main/off-hand if needed
-			if (target instanceof LivingEntity livingTarget) {
+			try{if (target instanceof LivingEntity livingTarget) {
 				ItemStack main = player.getInventory().getItemInMainHand();
-				ItemStack off  = player.getInventory().getItemInOffHand();
+				ItemStack off = player.getInventory().getItemInOffHand();
+				ItemStack head = player.getInventory().getHelmet();
+				ItemStack body = player.getInventory().getChestplate();
+				ItemStack legs = player.getInventory().getLeggings();
+				ItemStack feet = player.getInventory().getBoots();
+				
 				if (!main.equals(livingTarget.getEquipment().getItemInMainHand()))
 					livingTarget.getEquipment().setItemInMainHand(main);
 				if (!off.equals(livingTarget.getEquipment().getItemInOffHand()))
 					livingTarget.getEquipment().setItemInOffHand(off);
-			}
+				if (!head.equals(livingTarget.getEquipment().getHelmet()))
+					livingTarget.getEquipment().setHelmet(head);
+				if (!body.equals(livingTarget.getEquipment().getChestplate()))
+					livingTarget.getEquipment().setChestplate(body);
+				if (!legs.equals(livingTarget.getEquipment().getLeggings()))
+					livingTarget.getEquipment().setLeggings(legs);
+				if (!feet.equals(livingTarget.getEquipment().getBoots()))
+					livingTarget.getEquipment().setBoots(feet);
+			}} catch (Exception ignored) {}
 			
 		}, 1L, 1L);
 		
 		PossessionSession session = new PossessionSession(player, target, task, System.currentTimeMillis(), UUID.randomUUID());
-		activeSessions.put(player.getUniqueId(), session);
-		targetToPlayer.put(targetId, player.getUniqueId());
+		activeSessionsData.put(player.getUniqueId(), session);
+		possessionMap.put(player.getUniqueId(), target.getUniqueId());
 	}
 	
 	/** Stop possession by player */
 	public void stopPossessing(Player player) {
-		PossessionSession session = activeSessions.remove(player.getUniqueId());
+		PossessionSession session = activeSessionsData.remove(player.getUniqueId());
 		if (session == null) return;
 		
 		try { if (session.task() != null) session.task().cancel(); } catch (Exception ignored) {}
@@ -119,12 +125,12 @@ public class PossessionHandler {
 			session.player().setCollidable(true);
 		} catch (Exception ignored) {}
 		
-		targetToPlayer.remove(session.target().getUniqueId());
+		possessionMap.remove(player.getUniqueId());
 		player.sendActionBar(Component.text("The Possession Ends...").color(NamedTextColor.DARK_GRAY));
 	}
 	
 	public void stopAllPossessions() {
-		for (UUID u : new ArrayList<>(activeSessions.keySet())) {
+		for (UUID u : new ArrayList<>(activeSessionsData.keySet())) {
 			Player p = Bukkit.getPlayer(u);
 			if (p != null) stopPossessing(p);
 		}
@@ -133,16 +139,12 @@ public class PossessionHandler {
 	
 	/** Cleanup invalid sessions */
 	public void cleanupSessions() {
-		List<UUID> remove = new ArrayList<>();
-		for (var e : activeSessions.entrySet()) {
+		for (var e : activeSessionsData.entrySet()) {
 			PossessionSession s = e.getValue();
-			if (!s.player().isOnline() || !s.target().isValid()) {
-				try { if (s.task() != null) s.task().cancel(); } catch (Exception ignored) {}
-				//try { if (s.cloneEntity() != null && s.cloneEntity.isValid()) s.cloneEntity().remove(); } catch (Exception ignored) {}
-				remove.add(e.getKey());
-				targetToPlayer.remove(s.target().getUniqueId());
-			}
+			try { if (s.task() != null) s.task().cancel(); } catch (Exception ignored) {}
+			possessionMap.remove(s.player().getUniqueId());
 		}
-		for (UUID u : remove) activeSessions.remove(u);
+		activeSessionsData.clear();
+		possessionMap.clear();
 	}
 }

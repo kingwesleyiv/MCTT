@@ -33,7 +33,8 @@ public void onPlayerJump(PlayerMoveEvent event) {
 	Vector velocity = player.getVelocity();
 	
 	// Only attempt ledge climb if moving downward
-	if (velocity.getY() < 0.02 && player.getCurrentInput().isJump()) {
+	if(player.getPose() == Pose.SWIMMING && velocity.getY() == 0) player.setVelocity(velocity.clone().setY(1));
+	if (velocity.getY() <= -0.1 && player.getCurrentInput().isJump()) {
 		Vector dir = player.getLocation().getDirection();
 		dir.setY(0); // ignore up/down pitch
 		dir.normalize();
@@ -79,7 +80,6 @@ public void onPlayerInput(PlayerInputEvent event) {
 		&& (player.getPose().equals(Pose.STANDING) || player.getPose().equals(Pose.SNEAKING))) {
 		player.performCommand("crawl");
 	}
-	if (player.getGameMode().equals(GameMode.SPECTATOR) && MCTT.isDM(player)) { player.sendMessage(event.getInput().toString());}
 }
 
 @EventHandler

@@ -1,9 +1,8 @@
 name: MCTT
-version: '0.4.1'
+version: '0.5'
 main: lgs.mctt.MCTT
 api-version: '1.21'
 load: STARTUP
-loader: org.example.MyPluginLoader
 authors: [ KingWesley ]
 description: A plugin designed to turn Minecraft into a TTRPG Tabletop.
 website:

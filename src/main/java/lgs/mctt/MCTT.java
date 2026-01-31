@@ -254,26 +254,40 @@ private void buildCommands() {
 		);
 
 	LiteralArgumentBuilder<CommandSourceStack> foodCMD = Commands.literal("food")
-		// /food <int>
+		// /food <value> <target...>
 		.then(Commands.argument("value", FloatArgumentType.floatArg(0, 20))
-			.executes(ctx -> {
-				Player player = (Player) ctx.getSource().getSender();
-				int value = (int) FloatArgumentType.getFloat(ctx, "value");
-				player.setFoodLevel(value);
-				return 1;
-			})
-		)
-		// /food absorb <int>
-		.then(Commands.literal("absorb")
-			.then(Commands.argument("value", FloatArgumentType.floatArg(0))
+			.then(Commands.argument("target", ArgumentTypes.players())
 				.executes(ctx -> {
-					Player player = (Player) ctx.getSource().getSender();
 					int value = (int) FloatArgumentType.getFloat(ctx, "value");
-					player.setAbsorptionAmount(value);
+					final EntitySelectorArgumentResolver selector = ctx.getArgument("target", EntitySelectorArgumentResolver.class);
+					final List<Player> targets = selector.resolve(ctx.getSource()).stream().filter(e ->
+						e instanceof Player).map(e -> (Player) e).toList();
+
+					for (Player target : targets) {
+						target.setFoodLevel(value);
+					}
 					return 1;
 				})
 			)
+		)
+		// /food absorb <value> <target...>
+		.then(Commands.literal("absorb")
+			.then(Commands.argument("value", FloatArgumentType.floatArg(0))
+				.then(Commands.argument("target", ArgumentTypes.players())
+					.executes(ctx -> {
+						int value = (int) FloatArgumentType.getFloat(ctx, "value");
+						final EntitySelectorArgumentResolver selector = ctx.getArgument("target", EntitySelectorArgumentResolver.class);
+						final List<Player> targets = selector.resolve(ctx.getSource()).stream().filter(e ->
+							e instanceof Player).map(e -> (Player) e).toList();
+						for (Player target : targets) {
+							target.setAbsorptionAmount(value);
+						}
+						return 1;
+					})
+				)
+			)
 		);
+
 
 
 
